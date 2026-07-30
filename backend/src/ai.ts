@@ -3,7 +3,7 @@ import { ArticleContent, ArticleIntelligence, RawHeadline } from './types.js';
 import { cleanArticle } from './textCleaner.js';
 
 /**
- * 创建 OpenAI 兼容客户端（单例复用）- LongCat API
+ * 创建 OpenAI 兼容客户端（单例复用）
  */
 let _client: OpenAI | null = null;
 function getClient(apiKey: string): OpenAI {
