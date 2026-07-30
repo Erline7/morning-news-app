@@ -10,7 +10,7 @@ function getClient(apiKey: string): OpenAI {
   if (!_client) {
     _client = new OpenAI({
       apiKey,
-      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      baseURL: "https://api.longcat.chat/openai/v1",
       maxRetries: 0,
     });
   }
@@ -107,7 +107,7 @@ export async function analyzeArticle(
   const safeContent = cleanArticle(content.content);
   console.log(`[AI] 正在分析: ${content.title?.slice(0, 30)}... | 清洗后 ${safeContent.length} 字`);
 
-  // 太长文章截断
+  // 太长文章截断（LongCat 有输入限制）
   const MAX_CONTENT_LENGTH = 8000
   const truncatedContent = safeContent.length > MAX_CONTENT_LENGTH
     ? safeContent.slice(0, MAX_CONTENT_LENGTH) + '\n\n（以下内容已截断）'
@@ -136,7 +136,6 @@ ${relatedGuide}
 
 严格输出以下 JSON 格式（字段类型必须一致，所有字段必须输出）：
 {
-  "title": "文章标题（翻译成中文，如果是英文标题）",
   "summary": "文章核心总结（${summaryLength}，覆盖背景、关键事件、结论）",
   "category": "文章最核心的主分类。${categoryGuide}",
   "importance": 重要性评分 1-10（只输出数字）,
@@ -152,7 +151,7 @@ ${relatedGuide}
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'qwen3.5-livetranslate-flash-realtime',
+        model: 'LongCat-2.0',
         messages: [{ role: 'user', content: finalPrompt }],
         max_tokens: 5000,
       }),
@@ -172,7 +171,7 @@ ${relatedGuide}
     }
 
     return {
-      title: parsed.title || content.title,
+      title: content.title,
       url: content.url,
       source: content.source,
       collectedAt: content.collectedAt || new Date().toISOString(),
@@ -215,7 +214,7 @@ ${articles.map(a => `- 标题：${a.title} [分类：${a.category}]
   console.log('[AI] 正在撰写市场日刊简报...');
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'qwen3.5-livetranslate-flash-realtime',
+      model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 6000,
     }),
@@ -256,7 +255,7 @@ export async function generatePodcastScript(
   console.log('[AI] 正在将简报改写为播客文案...');
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'qwen3.5-livetranslate-flash-realtime',
+      model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 10000,
     }),
@@ -301,7 +300,7 @@ ${notes.length > 0 ? notes.map((n, i) => `${i + 1}. 标题：${n.title || '无�
   console.log('[AI] 正在生成每日复盘报告...');
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'qwen3.5-livetranslate-flash-realtime',
+      model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 1000,
     }),
