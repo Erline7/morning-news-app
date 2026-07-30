@@ -202,11 +202,12 @@
             </div>
           </div>
 
-          <div class="mb-20">
+          <!-- 今日简报 -->
+          <div class="mb-16">
             <div class="flex items-center justify-between mb-5">
               <div class="flex items-center text-sm font-semibold text-gray-500 dark:text-gray-400">
                 <BookOpen :size="16" class="mr-2" />
-                今日简报全文
+                今日简报
               </div>
               <button
                 v-if="hasAudio"
@@ -245,6 +246,38 @@
               <div v-if="briefingData.length === 0" class="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">
                 <p>今天暂无高优情报更新</p>
               </div>
+            </div>
+          </div>
+
+          <!-- GitHub Trending（单独区域） -->
+          <div v-if="githubTrending.length > 0" class="mb-20">
+            <div class="flex items-center text-xs font-semibold tracking-widest text-gray-400 dark:text-gray-500 uppercase mb-5">
+              <TrendingUp :size="14" class="mr-2" />
+              GITHUB TRENDING · 今日热门开源项目
+            </div>
+            <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+              <a
+                v-for="(repo, idx) in githubTrending"
+                :key="idx"
+                :href="repo.url"
+                target="_blank"
+                class="p-5 flex items-start hover:bg-gray-50 dark:hover:bg-[#222] transition-colors group block border-b border-gray-50 dark:border-gray-800/50 last:border-b-0"
+              >
+                <div class="text-gray-400 dark:text-gray-500 font-mono w-8 mt-0.5 text-sm">{{ idx + 1 }}</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center mb-1">
+                    <h3 class="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">{{ repo.title }}</h3>
+                    <ExternalLink :size="14" class="ml-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <p class="text-[13px] text-gray-500 dark:text-gray-400 mb-3 leading-relaxed line-clamp-2">
+                    {{ repo.summary || repo.preFetchedContent || 'No description available.' }}
+                  </p>
+                  <div class="flex items-center text-xs text-gray-400 dark:text-gray-500 space-x-4">
+                    <span class="flex items-center"><Star :size="12" class="mr-1" /> GitHub</span>
+                    <span class="px-2 py-0.5 bg-gray-100 dark:bg-[#252525] rounded text-gray-500 dark:text-gray-400 font-medium">Trending</span>
+                  </div>
+                </div>
+              </a>
             </div>
           </div>
         </main>
@@ -1238,10 +1271,12 @@ const filteredArticles = computed(() => {
 
 const briefingData = computed(() => {
   const grouped = {};
-  const todayArticles = rawArticles.value.filter(a => a.collectedAt?.startsWith(todayStr));
+  // 过滤掉 GitHub Trending
+  const todayArticles = rawArticles.value
+    .filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending);
   todayArticles.forEach(article => {
     if (article.summary) {
-      const cat = userEdits.value[article.url] || article.category;
+      const cat = userEdits.value[a.url] || article.category;
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({ title: article.title, desc: article.summary, url: article.url });
     }
