@@ -5,6 +5,7 @@ import {
   fetchCaixinGlobalHeadlines,
   fetchYahooFinanceDetailed,
   fetchGithubTrendingHeadlines,
+  fetchHackerNewsHeadlines,
   fetchGenericUrl,
   fetchArticleContent
 } from './scrapers.js'
@@ -178,14 +179,15 @@ async function run() {
     }
   })()
 
-  // 并发抓取：邮件 + CLS + 华尔街见闻 + 财新 + Yahoo + GitHub
-  const [emailHeadlines, cls, ws, cx, yahoo, github] = await Promise.allSettled([
+  // 并发抓取：邮件 + CLS + 华尔街见闻 + 财新 + Yahoo + GitHub + HackerNews
+  const [emailHeadlines, cls, ws, cx, yahoo, github, hackernews] = await Promise.allSettled([
     emailTask,
     fetchCLSHeadlines(),
     fetchWallstreetHeadlines(),
     fetchCaixinGlobalHeadlines(),
     fetchYahooFinanceDetailed(),
-    fetchGithubTrendingHeadlines()
+    fetchGithubTrendingHeadlines(),
+    fetchHackerNewsHeadlines()
   ])
 
   const allHeadlines = [
@@ -194,13 +196,14 @@ async function run() {
     ...(ws.status === 'fulfilled' ? ws.value : []),
     ...(cx.status === 'fulfilled' ? cx.value : []),
     ...(yahoo.status === 'fulfilled' ? yahoo.value : []),
+    ...(hackernews.status === 'fulfilled' ? hackernews.value : []),
   ]
 
   if (github.status === 'fulfilled') {
     githubTrendingData = github.value
   }
 
-  console.log(`✅ 抓取完成 | 邮件: ${emailHeadlines.status === 'fulfilled' ? emailHeadlines.value.length : 0} | CLS: ${cls.status === 'fulfilled' ? cls.value.length : 0} | 华尔街见闻: ${ws.status === 'fulfilled' ? ws.value.length : 0} | 财新: ${cx.status === 'fulfilled' ? cx.value.length : 0} | Yahoo: ${yahoo.status === 'fulfilled' ? yahoo.value.length : 0} | GitHub: ${githubTrendingData.length} 条`)
+  console.log(`✅ 抓取完成 | 邮件: ${emailHeadlines.status === 'fulfilled' ? emailHeadlines.value.length : 0} | CLS: ${cls.status === 'fulfilled' ? cls.value.length : 0} | 华尔街见闻: ${ws.status === 'fulfilled' ? ws.value.length : 0} | 财新: ${cx.status === 'fulfilled' ? cx.value.length : 0} | Yahoo: ${yahoo.status === 'fulfilled' ? yahoo.value.length : 0} | HackerNews: ${hackernews.status === 'fulfilled' ? hackernews.value.length : 0} | GitHub: ${githubTrendingData.length} 条`)
 
   // 上传 GitHub 原始趋势快照
   if (githubTrendingData.length > 0) {

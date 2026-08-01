@@ -305,6 +305,41 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
   return headlines;
 }
 
+// ==================== Hacker News ====================
+
+/**
+ * 抓取 Hacker News 前 5 条热门
+ * https://news.ycombinator.com/front
+ */
+export async function fetchHackerNewsHeadlines(): Promise<RawHeadline[]> {
+  const headlines: RawHeadline[] = []
+  try {
+    const response = await requestWithRetry('https://news.ycombinator.com/front', { timeout: 20000 })
+    const $ = load(response.data)
+
+    // HN 的标题在 .titleline > a
+    $('.titleline > a').each((_, el) => {
+      if (headlines.length >= 5) return
+      const title = $(el).text().trim()
+      const url = $(el).attr('href') || ''
+      if (!title || !url) return
+
+      // 处理相对链接（item?id=xxx 是 HN 讨论页）
+      const fullUrl = url.startsWith('http') ? url : `https://news.ycombinator.com/${url}`
+
+      headlines.push({
+        title,
+        url: fullUrl,
+        source: 'Hacker News',
+        collectedAt: new Date().toISOString()
+      })
+    })
+  } catch (error: any) {
+    console.log(`      [HackerNews] ⚠️ 提取失败: ${error.message}`)
+  }
+  return headlines
+}
+
 // ==================== 通用 URL 抓取（用于前端任意输入） ====================
 
 /**
