@@ -1272,12 +1272,13 @@ const filteredArticles = computed(() => {
 
 const briefingData = computed(() => {
   const grouped = {};
+  if (!rawArticles.value || !Array.isArray(rawArticles.value)) return [];
   // 过滤掉 GitHub Trending
   const todayArticles = rawArticles.value
     .filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending);
   todayArticles.forEach(article => {
     if (article.summary) {
-      const cat = userEdits.value[a.url] || article.category;
+      const cat = userEdits.value[article.url] || article.category;
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({ title: article.title, desc: article.summary, url: article.url });
     }
