@@ -1,9 +1,5 @@
 import fs from 'fs/promises';
-import { execFile } from 'child_process';
-import util from 'util';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-
-const execFileAsync = util.promisify(execFile);
 
 const r2Client = new S3Client({
   region: 'auto',
@@ -14,29 +10,62 @@ const r2Client = new S3Client({
   },
 });
 
+/**
+ * 使用 MiniMax TTS 同步接口生成语音
+ * 文档: https://platform.minimax.io/document/tts
+ */
 async function generateSpeech(text: string): Promise<Buffer> {
-  const encodedText = encodeURIComponent(text.substring(0, 200));
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=zh-CN&client=tw-ob`;
+  const apiKey = process.env.MINIMAX_API_KEY;
+  if (!apiKey) throw new Error('MINIMAX_API_KEY 未配置');
 
-  await fs.mkdir('.cache/tts', { recursive: true });
-  const tempFile = `.cache/tts/temp-${Date.now()}.mp3`;
+  const url = 'https://api.minimax.chat/v1/t2a_v2';
 
-  const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:7897';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'speech-02-hd',
+      text: text.substring(0, 5000),
+      voice_setting: {
+        voice_id: 'female-shaonv',  // 女声
+        speed: 1.0,
+        vol: 1.0,
+        pitch: 0,
+      },
+      audio_setting: {
+        sample_rate: 32000,
+        format: 'mp3',
+        bitrate: 128000,
+      },
+    }),
+  });
 
-  await execFileAsync('curl', [
-    '-x', proxy,
-    '-o', tempFile,
-    '-s',
-    '-H', 'User-Agent: Mozilla/5.0',
-    url,
-  ]);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`MiniMax TTS 返回 ${res.status}: ${err}`);
+  }
 
-  const buffer = await fs.readFile(tempFile);
-  await fs.rm(tempFile, { force: true });
+  const data = await res.json();
 
-  return buffer;
+  // 成功时返回 base64 编码的音频
+  if (data.data?.audio) {
+    return Buffer.from(data.data.audio, 'hex');
+  }
+
+  // 检查错误
+  if (data.base_resp?.status_code !== 0) {
+    throw new Error(`MiniMax 错误: ${data.base_resp?.status_msg || '未知错误'}`);
+  }
+
+  throw new Error('MiniMax TTS 未返回音频数据');
 }
 
+/**
+ * 将文本合成语音并上传到 R2
+ */
 export async function synthesizeAudio(
   text: string,
   date: string,
@@ -48,7 +77,7 @@ export async function synthesizeAudio(
   const maxLength = options?.maxLength ?? 0;
   const retainLocal = options?.retainLocal ?? false;
 
-  console.log('   🎙️ [TTS] 正在合成语音...');
+  console.log('   🎙️ [TTS] 正在合成语音（MiniMax）...');
 
   let safeText = text;
   if (maxLength > 0 && text.length > maxLength) {
