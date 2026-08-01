@@ -30,6 +30,13 @@ const CONFIG = {
   aiConcurrency: 2,
 }
 
+// ====================== 运行模式 ======================
+// PIPELINE_MODE=morning（默认）：完整流程（抓取→简报→复盘→记忆）
+// PIPELINE_MODE=evening：只跑复盘 + 记忆系统
+//   - 复盘日期由 REVIEW_DATE 指定（格式 YYYY-MM-DD），不指定则用当天日期
+const PIPELINE_MODE = process.env.PIPELINE_MODE || 'morning'
+const REVIEW_DATE = process.env.REVIEW_DATE || null
+
 // ====================== 环境变量校验 ======================
 const REQUIRED_ENV = ['DASHSCOPE_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_KV_NAMESPACE_ID', 'CLOUDFLARE_API_TOKEN'] as const
 for (const key of REQUIRED_ENV) {
@@ -104,12 +111,39 @@ async function processArticle(
 
 // ====================== 主流程 ======================
 async function run() {
-  console.log('🚀 DailyBrief Pipeline v3.0 (混合抓取版) 开始执行...')
+  console.log(`🚀 DailyBrief Pipeline [${PIPELINE_MODE} 模式] 开始执行...`)
   console.time('总耗时')
 
   const keysToDelete: string[] = []
   let githubTrendingData: any[] = []
 
+  // ==================== Evening 模式：只跑复盘 + 记忆系统 ====================
+  if (PIPELINE_MODE === 'evening') {
+    const reviewDate = REVIEW_DATE || new Date().toISOString().slice(0, 10)
+    console.log(`🌙 Evening 模式：复盘日期 = ${reviewDate}`)
+
+    try {
+      console.log('🚀 生成每日复盘报告...')
+      await generateDailyReport(reviewDate, DASHSCOPE_API_KEY)
+      console.log('   ✅ 每日复盘报告已生成')
+    } catch (e: any) {
+      console.error(`   ⚠️ 报告生成失败: ${e.message}`)
+    }
+
+    try {
+      console.log('🚀 记忆系统处理...')
+      await runMemoryPipeline(reviewDate, DASHSCOPE_API_KEY)
+      console.log('   ✅ 记忆系统处理完毕')
+    } catch (e: any) {
+      console.error(`   ⚠️ 记忆系统处理失败: ${e.message}`)
+    }
+
+    console.timeEnd('总耗时')
+    console.log('✅ Evening Pipeline 执行完毕！')
+    return
+  }
+
+  // ==================== Morning 模式：完整流程 ====================
   // ==================== 1. 并行抓取所有信息源 ====================
   console.log('🚀 1. 并行抓取所有信息源...')
 
@@ -319,27 +353,9 @@ async function run() {
     console.warn(`⚠️ 警告: 因数据落库 R2 未完全成功，系统自动挂起并保留 KV 邮件以供重试！`)
   }
 
-  // ==================== 8. 生成每日复盘报告 ====================
-  if (storageSuccess) {
-    try {
-      console.log('🚀 8. 生成每日复盘报告...')
-      await generateDailyReport(today, DASHSCOPE_API_KEY)
-      console.log('   ✅ 每日复盘报告已生成')
-    } catch (e: any) {
-      console.error(`   ⚠️ 报告生成失败: ${e.message} (不影响主流程)`)
-    }
-  }
-
-  // ==================== 9. 记忆系统每日处理 ====================
-  if (storageSuccess) {
-    try {
-      console.log('🚀 9. 记忆系统处理...')
-      await runMemoryPipeline(today, DASHSCOPE_API_KEY)
-      console.log('   ✅ 记忆系统处理完毕')
-    } catch (e: any) {
-      console.error(`   ⚠️ 记忆系统处理失败: ${e.message} (不影响主流程)`)
-    }
-  }
+  // ==================== 8 & 9. 复盘 + 记忆系统 ====================
+  // 注意：复盘和记忆系统由 evening 模式单独跑（每晚 22:00 北京时间）
+  // morning 模式只负责抓取新闻 + 生成简报
 
   console.timeEnd('总耗时')
   console.log('✅ Pipeline 全链路执行完毕！')
