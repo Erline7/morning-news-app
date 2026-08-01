@@ -136,6 +136,7 @@ ${relatedGuide}
 
 严格输出以下 JSON 格式（字段类型必须一致，所有字段必须输出）：
 {
+  "title": "文章标题（如果是英文标题，必须翻译成中文；如果是中文标题，保持原样）",
   "summary": "文章核心总结（${summaryLength}，覆盖背景、关键事件、结论）",
   "category": "文章最核心的主分类。${categoryGuide}",
   "importance": 重要性评分 1-10（只输出数字）,
@@ -171,7 +172,7 @@ ${relatedGuide}
     }
 
     return {
-      title: content.title,
+      title: parsed.title || content.title,
       url: content.url,
       source: content.source,
       collectedAt: content.collectedAt || new Date().toISOString(),
