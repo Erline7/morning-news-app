@@ -195,7 +195,7 @@
               @click="activeFilter = stat.label; activeTab = 'content'"
             >
               <div class="flex items-center text-gray-500 dark:text-gray-400 text-[13px] font-medium">
-                <component :is="stat.icon" :size="16" class="mr-2" />
+                <component v-if="stat.icon" :is="stat.icon" :size="16" class="mr-2" />
                 {{ stat.label }}
               </div>
               <div class="text-3xl font-serif text-gray-900 dark:text-white">{{ stat.count }}</div>
