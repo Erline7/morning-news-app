@@ -258,16 +258,12 @@ async function run() {
     fs.writeFileSync(path.join(cacheDir, 'daily_briefing.md'), briefing, 'utf-8')
     fs.writeFileSync(path.join(cacheDir, 'podcast_script.md'), script, 'utf-8')
 
-    // 只在本地运行 TTS（GitHub Actions 没有代理，无法访问 Google TTS）
-    if (!process.env.GITHUB_ACTIONS) {
-      try {
-        audioUrl = await synthesizeAudio(script, today, { retainLocal: false })
-        console.log(`🎉 离线音频 TTS 合成成功: ${audioUrl}`)
-      } catch (e: any) {
-        console.warn(`   ⚠️ TTS 失败: ${e.message}`)
-      }
-    } else {
-      console.log(`   ⚠️ GitHub Actions 环境跳过 TTS（需要代理）`)
+    // TTS 合成（MiniMax TTS，无需代理）
+    try {
+      audioUrl = await synthesizeAudio(script, today, { retainLocal: false })
+      console.log(`🎉 离线音频 TTS 合成成功: ${audioUrl}`)
+    } catch (e: any) {
+      console.warn(`   ⚠️ TTS 失败: ${e.message}`)
     }
   } catch (e: any) {
     console.error(`   ❌ 简报/音频合成阶段发生异常: ${e.message}`)
