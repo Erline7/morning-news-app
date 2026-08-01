@@ -1505,17 +1505,19 @@ onUnmounted(() => {
 
 // --- Computed ---
 const todayStr = new Date().toISOString().split('T')[0];
-const totalArticles = computed(() => rawArticles.value.length);
+const totalArticles = computed(() => rawArticles.value.filter(a => !a.isGithubTrending).length);
 const todayArticlesCount = computed(() =>
-  rawArticles.value.filter(a => a.collectedAt?.startsWith(todayStr)).length
+  rawArticles.value.filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending).length
 );
 
 const stats = computed(() => {
   const counts = {};
-  rawArticles.value.forEach(article => {
-    const cat = userEdits.value[article.url] || article.category;
-    counts[cat] = (counts[cat] || 0) + 1;
-  });
+  rawArticles.value
+    .filter(a => !a.isGithubTrending)
+    .forEach(article => {
+      const cat = userEdits.value[article.url] || article.category;
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
   return Object.entries(counts).map(([label, count]) => ({
     label, count, icon: getCategoryIcon(label)
   })).sort((a, b) => b.count - a.count);
