@@ -9,6 +9,7 @@ import {
   fetchArticleContent
 } from './scrapers.js'
 import { analyzeArticle, generateDailyBriefing, generatePodcastScript, AnalysisContext } from './ai.js'
+import { runMemoryPipeline } from './memoryAI.js'
 import { synthesizeAudio } from './audio.js'
 import fs from 'fs'
 import path from 'path'
@@ -330,6 +331,17 @@ async function run() {
       console.log('   ✅ 每日复盘报告已生成')
     } catch (e: any) {
       console.error(`   ⚠️ 报告生成失败: ${e.message} (不影响主流程)`)
+    }
+  }
+
+  // ==================== 9. 记忆系统每日处理 ====================
+  if (storageSuccess) {
+    try {
+      console.log('🚀 9. 记忆系统处理...')
+      await runMemoryPipeline(today, DASHSCOPE_API_KEY)
+      console.log('   ✅ 记忆系统处理完毕')
+    } catch (e: any) {
+      console.error(`   ⚠️ 记忆系统处理失败: ${e.message} (不影响主流程)`)
     }
   }
 

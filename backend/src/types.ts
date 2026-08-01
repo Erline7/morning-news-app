@@ -54,3 +54,51 @@ export interface DailyBriefing {
   audioUrl: string  // 简报音频链接
   generatedAt: string // 简报生成时间
 }
+
+// ====================== 记忆系统 ======================
+
+// 事件类型
+export type EventType = 'article_read' | 'note_created' | 'note_edited' | 'question_asked' | 'article_starred' | 'category_edited'
+
+// 事件流中的单条事件
+export interface MemoryEvent {
+  id: string // 事件唯一ID，格式: evt_YYYYMMDD_HHMMSS_random
+  timestamp: string // ISO 时间戳
+  type: EventType // 事件类型
+  title: string // 事件标题（文章标题/笔记标题/问题摘要）
+  content?: string // 事件内容（笔记内容/AI回答摘要）
+  refs: {
+    articles?: string[] // 关联的文章ID
+    threads?: string[] // 关联的脉络ID
+    notes?: string[] // 关联的笔记ID
+  }
+  tags: string[] // 自动或手动打的标签
+}
+
+// 思考脉络
+export interface ThinkingThread {
+  id: string // 脉络ID，格式: thread_xxx
+  theme: string // 脉络主题（如"芯片供应链"）
+  createdAt: string // 创建时间
+  lastActiveAt: string // 最后活跃时间
+  eventIds: string[] // 关联的事件ID列表
+  summary: string // AI生成的脉络摘要（如"从禁令→企业影响→国产替代"）
+  status: 'active' | 'decaying' | 'dormant' // 活跃/衰减中/休眠
+  decay: number // 衰减系数 0-1，1=刚活跃，0=即将归档
+  suggestedNext?: string // 建议下一步关注方向
+}
+
+// 每日时间线分析
+export interface DailyTimelineAnalysis {
+  date: string
+  events: MemoryEvent[]
+  narrative: string // AI生成的今日叙事（如"你今天围绕芯片话题..."）
+  followUpQuestions: string[] // 复盘问题（2-3个）
+  activeThreadIds: string[] // 今日活跃的脉络ID
+}
+
+// 脉络存储结构（R2）
+export interface ThreadsStore {
+  threads: ThinkingThread[]
+  updatedAt: string
+}
