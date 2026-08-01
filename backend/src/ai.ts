@@ -201,6 +201,11 @@ export async function generateDailyBriefing(
 ): Promise<string> {
   const client = getClient(apiKey);
 
+  // 按重要性评分排序，取前 10 篇
+  const topArticles = [...articles]
+    .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+    .slice(0, 10);
+
   const prompt = `请根据以下财经情报，生成一份中文市场日刊简报，跳过争议性政治话题，全文约 8-10 分钟阅读时间。结构：
 # 今日市场全景
 # 今日重点事件
@@ -208,18 +213,18 @@ export async function generateDailyBriefing(
 # 深度思考与机会
 
 文章情报：
-${articles.map(a => `- 标题：${a.title} [分类：${a.category}]
+${topArticles.map(a => `- 标题：${a.title} [分类：${a.category}]
   概要：${a.summary}
   涉及实体：${a.entities.join(', ')}
 `).join('\n')}`;
-  console.log('[AI] 正在撰写市场日刊简报...');
+  console.log(`[AI] 正在撰写市场日刊简报（${topArticles.length} 篇，按重要性排序）...`);
   const response = await withTimeout(
     client.chat.completions.create({
       model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 6000,
     }),
-    120000
+    180000
   );
   return response.choices?.[0]?.message?.content?.trim() ?? '';
 }
@@ -260,7 +265,7 @@ export async function generatePodcastScript(
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 10000,
     }),
-    120000
+    180000  // 180 秒超时
   );
   return response.choices?.[0]?.message?.content?.trim() ?? '';
 }
