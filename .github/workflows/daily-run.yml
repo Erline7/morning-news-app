@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
       
       - name: Install dependencies
-        run: cd backend && npm install
+        run: cd backend && npm ci
       
       - name: Run pipeline
         env:
