@@ -257,9 +257,8 @@ async function run() {
     fs.writeFileSync(path.join(cacheDir, 'daily_briefing.md'), briefing, 'utf-8')
     fs.writeFileSync(path.join(cacheDir, 'podcast_script.md'), script, 'utf-8')
 
-    // TTS 暂时跳过（Node.js 24 兼容性问题）
-    // audioUrl = await synthesizeAudio(script, today, { retainLocal: false })
-    console.log(`⚠️ TTS 暂时跳过（edge-tts 与 Node.js 24 不兼容）`)
+    audioUrl = await synthesizeAudio(script, today, { retainLocal: false })
+    console.log(`🎉 离线音频 TTS 合成成功: ${audioUrl}`)
   } catch (e: any) {
     console.error(`   ❌ 简报/音频合成阶段发生异常: ${e.message}`)
   }
