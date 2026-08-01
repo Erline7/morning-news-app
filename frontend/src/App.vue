@@ -507,9 +507,78 @@
 
         <!-- ================= CHAT PAGE ================= -->
         <main v-if="activeTab === 'chat'" class="h-full flex flex-col max-w-4xl mx-auto">
-          <div class="text-center py-6 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-            <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Knowledge Retrieval Chat</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">基于今日 {{ totalArticles }} 篇情报的智能问答</p>
+          <div class="py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
+            <div class="flex items-center justify-between px-6">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Knowledge Retrieval Chat</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">基于今日 {{ totalArticles }} 篇情报的智能问答</p>
+              </div>
+              <button
+                @click="showModelSelector = !showModelSelector"
+                class="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                :class="selectedModel.id !== 'default' ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300' : 'bg-gray-50 dark:bg-[#1A1A1A] border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#222]'"
+              >
+                <Cpu :size="14" />
+                {{ selectedModel.name }}
+                <ChevronDown :size="12" class="transition-transform" :class="{ 'rotate-180': showModelSelector }" />
+              </button>
+            </div>
+
+            <!-- 模型选择器面板 -->
+            <div v-if="showModelSelector" class="mx-6 mt-3 p-4 bg-gray-50 dark:bg-[#1A1A1A] rounded-xl border border-gray-200 dark:border-gray-700">
+              <div class="mb-3">
+                <label class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 block">选择模型</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <button
+                    v-for="model in PRESET_MODELS"
+                    :key="model.id"
+                    @click="chatModelId = model.id; saveModelConfig()"
+                    class="px-3 py-2 text-xs rounded-lg border text-left transition-all"
+                    :class="chatModelId === model.id
+                      ? 'bg-[#2D3A5F] dark:bg-[#3D4F7C] text-white border-[#2D3A5F] dark:border-[#3D4F7C]'
+                      : 'bg-white dark:bg-[#121212] text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-blue-300'"
+                  >
+                    {{ model.name }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 自定义模型设置 -->
+              <div v-if="selectedModel.provider === 'custom'" class="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                  <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Base URL</label>
+                  <input
+                    v-model="customBaseURL"
+                    @change="saveModelConfig"
+                    placeholder="https://api.openai.com/v1"
+                    class="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121212] border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300 dark:text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Model Name</label>
+                  <input
+                    v-model="customModelName"
+                    @change="saveModelConfig"
+                    placeholder="gpt-4o-mini"
+                    class="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121212] border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300 dark:text-gray-200"
+                  />
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">API Key</label>
+                  <input
+                    v-model="customApiKey"
+                    @change="saveModelConfig"
+                    type="password"
+                    placeholder="sk-..."
+                    class="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121212] border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300 dark:text-gray-200"
+                  />
+                </div>
+              </div>
+
+              <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
+                💡 配置保存在浏览器本地，不会上传到服务器
+              </p>
+            </div>
           </div>
 
           <div class="flex-1 overflow-y-auto p-6 space-y-6" ref="chatMessagesRef">
@@ -977,6 +1046,18 @@ const toggleDarkMode = () => {
 const R2_BASE_URL = 'https://cdn.secondmind.eu.cc';
 const WORKER_CHAT_API = 'https://dailybrief-chat-api.erline68.workers.dev';
 const API_BASE = 'https://dailybrief-api.erline68.workers.dev';
+
+// 预设模型列表（OpenAI 兼容 API）
+const PRESET_MODELS = [
+  { id: 'default', name: '默认 (Worker API)', provider: 'worker', endpoint: WORKER_CHAT_API },
+  { id: 'longcat', name: 'LongCat-2.0 (默认后端)', provider: 'worker-custom', endpoint: WORKER_CHAT_API, model: 'LongCat-2.0', baseURL: 'https://api.longcat.chat/openai/v1' },
+  { id: 'deepseek', name: 'DeepSeek', provider: 'custom', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1' },
+  { id: 'glm', name: '智谱 GLM', provider: 'custom', model: 'glm-4-flash', baseURL: 'https://open.bigmodel.cn/api/paas/v4' },
+  { id: 'kimi', name: 'Kimi (月之暗面)', provider: 'custom', model: 'moonshot-v1-8k', baseURL: 'https://api.moonshot.cn/v1' },
+  { id: 'qwen', name: '通义千问', provider: 'custom', model: 'qwen-plus', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { id: 'claude', name: 'Claude', provider: 'custom', model: 'claude-sonnet-4-20250514', baseURL: 'https://api.anthropic.com/v1' },
+  { id: 'custom', name: '自定义 API', provider: 'custom' },
+]
 
 const rawArticles = ref([]);
 const displayDateStr = ref('');
@@ -1558,6 +1639,23 @@ const chatMessages = ref([
   { role: 'assistant', content: '你好！我是你的 AI 助手。我已经读取了历史知识库情报。可以为你深入分析任何话题，或者回答你感兴趣的问题。' }
 ]);
 
+// 聊天模型配置（从 localStorage 读取）
+const chatModelId = ref(localStorage.getItem('chat_model_id') || 'default');
+const customApiKey = ref(localStorage.getItem('chat_custom_key') || '');
+const customBaseURL = ref(localStorage.getItem('chat_custom_base') || 'https://api.openai.com/v1');
+const customModelName = ref(localStorage.getItem('chat_custom_model') || 'gpt-4o-mini');
+const showModelSelector = ref(false);
+
+const selectedModel = computed(() => PRESET_MODELS.find(m => m.id === chatModelId.value) || PRESET_MODELS[0]);
+
+// 保存模型配置到 localStorage
+const saveModelConfig = () => {
+  localStorage.setItem('chat_model_id', chatModelId.value);
+  localStorage.setItem('chat_custom_key', customApiKey.value);
+  localStorage.setItem('chat_custom_base', customBaseURL.value);
+  localStorage.setItem('chat_custom_model', customModelName.value);
+};
+
 const scrollToBottom = async () => {
   await nextTick();
   if (chatMessagesRef.value) {
@@ -1589,18 +1687,63 @@ const sendMessage = async () => {
       .filter(msg => !msg.content.startsWith('你好！我是你的 AI 助手。'))
       .map(msg => ({ role: msg.role, content: msg.content }));
     const dateKey = new Date().toISOString().split('T')[0];
-    const response = await fetch(WORKER_CHAT_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: messagesToSend, date: dateKey })
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    const aiReply = data.choices?.[0]?.message?.content || '抱歉，API 没有返回有效内容。';
+
+    let aiReply = '';
+
+    if (selectedModel.value.provider === 'worker') {
+      // 使用默认 Worker API
+      const response = await fetch(WORKER_CHAT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messagesToSend, date: dateKey })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      aiReply = data.choices?.[0]?.message?.content || '抱歉，API 没有返回有效内容。';
+    } else {
+      // 使用自定义 API（OpenAI 兼容格式）
+      let apiKey = customApiKey.value.trim();
+      let baseURL = customBaseURL.value.trim().replace(/\/$/, '');
+      let modelName = customModelName.value.trim();
+
+      // 非自定义模型则用预设值
+      if (selectedModel.value.id !== 'custom') {
+        baseURL = selectedModel.value.baseURL;
+        modelName = selectedModel.value.model;
+      }
+
+      if (!apiKey) {
+        throw new Error('请先在模型设置中填入 API Key');
+      }
+
+      const response = await fetch(`${baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: `你是一个智能助手，正在帮助用户分析今天的资讯简报。今天是 ${dateKey}。请用中文回答。` },
+            ...messagesToSend
+          ],
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`API 错误 (${response.status}): ${errText.slice(0, 100)}`);
+      }
+      const data = await response.json();
+      aiReply = data.choices?.[0]?.message?.content || '抱歉，API 没有返回有效内容。';
+    }
+
     chatMessages.value.push({ role: 'assistant', content: aiReply });
   } catch (error) {
     console.error('Chat API Request failed:', error);
-    chatMessages.value.push({ role: 'assistant', content: '⚠️ 抱歉，连接 AI 助手失败了。请检查你的网络或 Worker API 配置。' });
+    chatMessages.value.push({ role: 'assistant', content: `⚠️ ${error.message || '连接 AI 助手失败，请检查模型设置。'}` });
   } finally {
     isChatLoading.value = false;
     scrollToBottom();
