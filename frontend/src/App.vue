@@ -325,7 +325,7 @@
                   </div>
                   <div class="flex gap-2 ml-4">
                     <button
-                      v-if="urlCheckResult.supportsRss || urlCheckResult.sampleArticles.length > 0"
+                      v-if="urlCheckResult.supportsRss || (urlCheckResult.sampleArticles && urlCheckResult.sampleArticles.length > 0)"
                       @click="subscribeUrl"
                       class="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
                     >
@@ -348,7 +348,7 @@
                 </div>
 
                 <!-- 预览文章列表 -->
-                <div v-if="urlCheckResult.sampleArticles.length > 0" class="mt-3">
+                <div v-if="urlCheckResult.sampleArticles && urlCheckResult.sampleArticles.length > 0" class="mt-3">
                   <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">检测到以下文章：</div>
                   <div class="space-y-1">
                     <a
@@ -364,7 +364,7 @@
                 </div>
 
                 <!-- 内容预览 -->
-                <div v-if="urlCheckResult.sampleContent && urlCheckResult.sampleArticles.length === 0" class="mt-3 p-3 bg-white dark:bg-[#121212] rounded-lg text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
+                <div v-if="urlCheckResult.sampleContent && (!urlCheckResult.sampleArticles || urlCheckResult.sampleArticles.length === 0)" class="mt-3 p-3 bg-white dark:bg-[#121212] rounded-lg text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
                   {{ urlCheckResult.sampleContent }}
                 </div>
               </div>
@@ -1076,9 +1076,10 @@ const subscribeUrl = async () => {
     });
 
     // 2. 立即抓取一次（如果有 RSS 或文章列表）
-    if (urlCheckResult.value.supportsRss || urlCheckResult.value.sampleArticles.length > 0) {
+    const sampleArticles = urlCheckResult.value.sampleArticles || [];
+    if (urlCheckResult.value.supportsRss || sampleArticles.length > 0) {
       // 如果有文章列表，逐个抓取前 3 篇
-      const articles = urlCheckResult.value.sampleArticles.slice(0, 3);
+      const articles = sampleArticles.slice(0, 3);
       for (const article of articles) {
         await fetch(`${API_BASE}/api/fetch-url`, {
           method: 'POST',
@@ -1250,8 +1251,8 @@ const todayArticlesCount = computed(() =>
 
 const stats = computed(() => {
   const counts = {};
-  rawArticles.value.forEach(a => {
-    const cat = userEdits.value[a.url] || a.category;
+  rawArticles.value.forEach(article => {
+    const cat = userEdits.value[article.url] || article.category;
     counts[cat] = (counts[cat] || 0) + 1;
   });
   return Object.entries(counts).map(([label, count]) => ({
@@ -1261,10 +1262,10 @@ const stats = computed(() => {
 
 const filteredArticles = computed(() => {
   // 过滤掉 GitHub Trending（只在首页展示）
-  const mainArticles = rawArticles.value.filter(a => !a.isGithubTrending)
+  const mainArticles = rawArticles.value.filter(article => !article.isGithubTrending)
   if (activeFilter.value === '全部') return mainArticles;
-  return mainArticles.filter(a => {
-    const cat = userEdits.value[a.url] || a.category;
+  return mainArticles.filter(article => {
+    const cat = userEdits.value[article.url] || article.category;
     return cat === activeFilter.value;
   });
 });
