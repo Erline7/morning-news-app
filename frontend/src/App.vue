@@ -352,36 +352,34 @@
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium text-gray-900 dark:text-white mb-1 truncate">{{ urlCheckResult.title || urlCheckResult.url }}</div>
                     <a :href="urlCheckResult.url" target="_blank" class="text-xs text-blue-500 hover:underline truncate block">{{ urlCheckResult.url }}</a>
-                    <p v-if="urlCheckResult.success" class="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-3">{{ urlCheckResult.summary }}</p>
-                    <p v-else class="text-xs text-red-500 mt-2">{{ urlCheckResult.error || '抓取失败，请手动填写或重试' }}</p>
+                    <p v-if="urlCheckResult.summary" class="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-3">{{ urlCheckResult.summary }}</p>
+                    <p v-if="urlCheckResult.category && urlCheckResult.success" class="text-xs text-blue-500 mt-1">分类：{{ urlCheckResult.category }}</p>
+                    <p v-if="urlCheckResult.justSaved" class="text-xs text-emerald-500 mt-2">✓ 已保存到内容库</p>
+                    <p v-if="!urlCheckResult.success" class="text-xs text-red-500 mt-2">{{ urlCheckResult.error || '抓取失败' }}，只能保存链接</p>
                   </div>
                   <div class="flex gap-2 ml-4 flex-shrink-0">
                     <button
-                      v-if="urlCheckResult.success"
-                      @click="saveLink(false)"
+                      v-if="urlCheckResult.success && !urlCheckResult.justSaved"
+                      @click="saveLinkAll()"
                       class="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors whitespace-nowrap"
                     >
-                      保存
+                      保存到内容库
                     </button>
                     <button
-                      v-if="!urlCheckResult.success"
-                      @click="saveLink(true)"
+                      v-if="!urlCheckResult.success && !urlCheckResult.justSaved"
+                      @click="saveLinkOnly()"
                       class="px-3 py-1.5 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors whitespace-nowrap"
                     >
-                      仅保存 URL
+                      仅保存链接
                     </button>
                     <button
+                      v-if="!urlCheckResult.justSaved"
                       @click="urlCheckResult = null"
                       class="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-[#222] rounded-lg transition-colors"
                     >
                       取消
                     </button>
                   </div>
-                </div>
-                <!-- 成功提示 -->
-                <div v-if="urlCheckResult.success && urlCheckResult.justSaved" class="mt-3 p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs rounded-lg flex items-center">
-                  <Check :size="14" class="mr-1.5" />
-                  保存成功！已添加到"我的链接"
                 </div>
               </div>
             </div>
@@ -460,7 +458,7 @@
                 </div>
               </div>
             </div>
-          </div>
+          </div><!-- 结束 v-if="!selectedArticle" -->
 
           <!-- 详细文章页 -->
           <div v-else class="max-w-3xl mx-auto">
@@ -869,13 +867,27 @@
                   <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ sub.title || sub.url }}</span>
                   <span v-if="sub.hasContent" class="text-[10px] font-medium px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 rounded">已抓取</span>
                 </div>
-                <p v-if="sub.content" class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-1">{{ sub.content }}</p>
+                <p v-if="sub.summary || sub.content" class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-1">{{ sub.summary || sub.content }}</p>
                 <a :href="sub.url" target="_blank" class="text-xs text-blue-500 dark:text-blue-400 hover:underline truncate block">{{ sub.url }}</a>
                 <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   添加于 {{ formatDateDisplay(sub.addedAt) }}
                 </div>
               </div>
-              <div class="flex items-center gap-2 ml-4">
+              <div class="flex flex-col gap-2 ml-4">
+                <button
+                  v-if="!sub.inLibrary"
+                  @click="addToLibrary(sub)"
+                  class="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                  title="添加到内容库"
+                >
+                  加入内容
+                </button>
+                <span
+                  v-if="sub.inLibrary"
+                  class="px-3 py-1.5 text-xs bg-gray-100 dark:bg-[#333] text-gray-500 dark:text-gray-400 rounded-lg"
+                >
+                  已加入内容库
+                </span>
                 <button
                   v-if="sub.hasContent"
                   @click="viewLinkContent(sub)"
@@ -1289,6 +1301,10 @@ const loadUserSubUrls = async () => {
     const res = await fetch(`${API_BASE}/api/user-urls?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
+      console.log('=== /api/user-urls 返回数据 ===');
+      console.log('完整 data:', data);
+      console.log('第一个链接:', data.urls?.[0]);
+      console.log('=== 结束 ===');
       userSubUrls.value = data.urls || [];
     }
   } catch (e) {
@@ -1419,6 +1435,7 @@ const viewLinkContent = (link) => {
   viewingLink.value = link;
 };
 
+// 抓取链接 → 显示预览（标题+摘要+分类）
 const handleAddUrl = async () => {
   if (!customUrl.value.trim()) return;
   isCheckingUrl.value = true;
@@ -1434,11 +1451,13 @@ const handleAddUrl = async () => {
       urlCheckResult.value = {
         success: true,
         url: customUrl.value.trim(),
-        title: data.title,
-        content: data.summary || data.content?.slice(0, 200) || '',
-        summary: data.summary || data.content?.slice(0, 200) || '',
+        title: data.title || customUrl.value.trim(),
+        summary: data.summary || '',
+        category: data.category || '未分类',
+        hasSummary: !!data.summary,
       };
     } else {
+      // 抓取失败 → 只保存裸链接
       urlCheckResult.value = {
         success: false,
         url: customUrl.value.trim(),
@@ -1456,35 +1475,103 @@ const handleAddUrl = async () => {
   }
 };
 
-const saveLink = async (urlOnly = false) => {
+// 保存到我的链接（无论是否抓取成功都可以）
+const saveToMyLinks = async () => {
   if (!urlCheckResult.value) return;
+  const item = urlCheckResult.value;
+  const payload = {
+    url: item.url,
+    title: item.title || item.url,
+    summary: item.summary || '',
+    category: item.category || '未分类',
+    hasSummary: !!item.success,
+    action: 'add',
+  };
+  console.log('=== 保存到我的链接 ===');
+  console.log('发送的数据:', payload);
+  console.log('=== 结束 ===');
   try {
-    // 保存到"我的链接"
-    await fetch(`${API_BASE}/api/user-urls`, {
+    const res = await fetch(`${API_BASE}/api/user-urls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await res.json();
+    console.log('保存结果:', result);
+    return true;
+  } catch (e) {
+    console.error('保存链接失败:', e);
+    return false;
+  }
+};
+
+// 保存到我的链接 + 同时添加到内容库
+const saveToLibrary = async () => {
+  if (!urlCheckResult.value || !urlCheckResult.value.success) return;
+  const item = urlCheckResult.value;
+  try {
+    // 1. 添加到内容库
+    const res = await fetch(`${API_BASE}/api/articles/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: urlCheckResult.value.url,
-        title: urlCheckResult.value.title || urlCheckResult.value.url,
-        content: urlOnly ? '' : (urlCheckResult.value.summary || urlCheckResult.value.content || ''),
-        hasContent: !urlOnly && !!(urlCheckResult.value.summary || urlCheckResult.value.content),
-        action: 'add',
+        title: item.title,
+        url: item.url,
+        source: '我的链接',
+        summary: item.summary,
+        category: item.category || '未分类',
+        importance: 5,
+        isUserAdded: true,
+        collectedAt: new Date().toISOString(),
       }),
     });
-
-    // 显示成功提示
-    urlCheckResult.value.justSaved = true;
-    customUrl.value = '';
-    await loadUserSubUrls();
-    // 1.5 秒后关闭预览并跳转到我的链接
-    setTimeout(() => {
-      urlCheckResult.value = null;
-      activeTab = 'subscriptions';
-    }, 1500);
+    const data = await res.json();
+    console.log('saveToLibrary 结果:', data);
+    return data.success;
   } catch (e) {
-    console.error('保存链接失败:', e);
-    urlCheckResult.value.error = '保存失败，请重试';
+    console.error('添加到内容库失败:', e);
+    return false;
   }
+};
+
+// 一键保存：链接→我的链接 + 内容→内容库
+const saveLinkAll = async () => {
+  if (!urlCheckResult.value) return;
+  const hadSummary = urlCheckResult.value.success;
+
+  // 如果有摘要，同时添加到内容库
+  if (hadSummary) {
+    await saveToLibrary();
+  }
+  // 无论如何都保存到我的链接
+  await saveToMyLinks();
+
+  // 显示成功提示
+  urlCheckResult.value.justSaved = true;
+  customUrl.value = '';
+  await loadUserSubUrls();
+  // 刷新内容库
+  if (hadSummary) {
+    await loadArticles();
+  }
+  // 1.5 秒后关闭预览
+  setTimeout(() => {
+    urlCheckResult.value = null;
+    activeTab.value = 'subscriptions';
+  }, 1500);
+};
+
+// 仅保存裸链接（抓取失败时）
+const saveLinkOnly = async () => {
+  if (!urlCheckResult.value) return;
+  await saveToMyLinks();
+  urlCheckResult.value.justSaved = true;
+  customUrl.value = '';
+  await loadUserSubUrls();
+  setTimeout(() => {
+    urlCheckResult.value = null;
+    activeTab.value = 'subscriptions';
+  }, 1500);
 };
 
 const removeSubscription = async (url) => {
@@ -1497,6 +1584,36 @@ const removeSubscription = async (url) => {
     await loadUserSubUrls();
   } catch (e) {
     console.error('删除失败:', e);
+  }
+};
+
+// 将已保存的链接添加到内容库（从"我的链接"列表操作）
+const addToLibrary = async (sub) => {
+  console.log('addToLibrary 数据:', sub);  // 调试用
+  const summaryText = sub.summary || sub.content || '';
+  if (!summaryText) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/articles/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: sub.title || sub.url,
+        url: sub.url,
+        source: '我的链接',
+        summary: summaryText,
+        category: sub.category || '未分类',
+        importance: 5,
+        isUserAdded: true,
+        collectedAt: sub.addedAt || new Date().toISOString(),
+      }),
+    });
+    const data = await res.json();
+    console.log('添加到内容库结果:', data);  // 调试用
+    if (data.success) {
+      sub.inLibrary = true;
+    }
+  } catch (e) {
+    console.error('添加到内容库失败:', e);
   }
 };
 
@@ -1689,6 +1806,24 @@ onMounted(async () => {
         ...a,
         collectedAt: a.collectedAt || today.toISOString()
       })).reverse();
+    }
+
+    // 加载用户添加到内容库的文章
+    try {
+      const libRes = await fetch(`${API_BASE}/api/articles?t=${Date.now()}`);
+      if (libRes.ok) {
+        const libData = await libRes.json();
+        if (libData.success && Array.isArray(libData.articles)) {
+          // 合并到 rawArticles，避免重复
+          for (const article of libData.articles) {
+            if (!rawArticles.value.find(a => a.url === article.url)) {
+              rawArticles.value.unshift(article);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('加载用户内容库失败:', e);
     }
 
     const githubUrl = `${R2_BASE_URL}/data/github_trending.json?t=${Date.now()}`;
