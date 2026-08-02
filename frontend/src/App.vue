@@ -1434,8 +1434,8 @@ const handleAddUrl = async () => {
         success: true,
         url: customUrl.value.trim(),
         title: data.title,
-        content: data.content,
-        summary: data.content?.slice(0, 200),
+        content: data.summary || data.content?.slice(0, 200) || '',
+        summary: data.summary || data.content?.slice(0, 200) || '',
       };
     } else {
       urlCheckResult.value = {
@@ -1458,17 +1458,39 @@ const handleAddUrl = async () => {
 const saveLink = async (urlOnly = false) => {
   if (!urlCheckResult.value) return;
   try {
+    // 1. 保存到"我的链接"
     await fetch(`${API_BASE}/api/user-urls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: urlCheckResult.value.url,
         title: urlCheckResult.value.title || urlCheckResult.value.url,
-        content: urlOnly ? '' : (urlCheckResult.value.content || ''),
-        hasContent: !urlOnly && !!urlCheckResult.value.content,
+        content: urlOnly ? '' : (urlCheckResult.value.summary || urlCheckResult.value.content || ''),
+        hasContent: !urlOnly && !!(urlCheckResult.value.summary || urlCheckResult.value.content),
         action: 'add',
       }),
     });
+
+    // 2. 同时加入内容库（知识情报库）
+    if (urlCheckResult.value.success && !urlOnly) {
+      const newArticle = {
+        title: urlCheckResult.value.title || urlCheckResult.value.url,
+        url: urlCheckResult.value.url,
+        source: '用户添加',
+        summary: urlCheckResult.value.summary || urlCheckResult.value.content || '',
+        category: '未分类',
+        importance: 0,
+        collectedAt: new Date().toISOString(),
+        isUserAdded: true,
+        isStarred: false,
+        isGithubTrending: false,
+      };
+      // 避免重复添加
+      if (!rawArticles.value.some(a => a.url === newArticle.url)) {
+        rawArticles.value.unshift(newArticle);
+      }
+    }
+
     // 显示成功提示
     urlCheckResult.value.justSaved = true;
     customUrl.value = '';
