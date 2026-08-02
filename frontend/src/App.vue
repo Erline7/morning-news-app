@@ -869,7 +869,8 @@
                   <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ sub.title || sub.url }}</span>
                   <span v-if="sub.hasContent" class="text-[10px] font-medium px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300 rounded">已抓取</span>
                 </div>
-                <a :href="sub.url" target="_blank" class="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 truncate block">{{ sub.url }}</a>
+                <p v-if="sub.content" class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-1">{{ sub.content }}</p>
+                <a :href="sub.url" target="_blank" class="text-xs text-blue-500 dark:text-blue-400 hover:underline truncate block">{{ sub.url }}</a>
                 <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   添加于 {{ formatDateDisplay(sub.addedAt) }}
                 </div>
@@ -1458,7 +1459,7 @@ const handleAddUrl = async () => {
 const saveLink = async (urlOnly = false) => {
   if (!urlCheckResult.value) return;
   try {
-    // 1. 保存到"我的链接"
+    // 保存到"我的链接"
     await fetch(`${API_BASE}/api/user-urls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1470,26 +1471,6 @@ const saveLink = async (urlOnly = false) => {
         action: 'add',
       }),
     });
-
-    // 2. 同时加入内容库（知识情报库）
-    if (urlCheckResult.value.success && !urlOnly) {
-      const newArticle = {
-        title: urlCheckResult.value.title || urlCheckResult.value.url,
-        url: urlCheckResult.value.url,
-        source: '用户添加',
-        summary: urlCheckResult.value.summary || urlCheckResult.value.content || '',
-        category: '未分类',
-        importance: 0,
-        collectedAt: new Date().toISOString(),
-        isUserAdded: true,
-        isStarred: false,
-        isGithubTrending: false,
-      };
-      // 避免重复添加
-      if (!rawArticles.value.some(a => a.url === newArticle.url)) {
-        rawArticles.value.unshift(newArticle);
-      }
-    }
 
     // 显示成功提示
     urlCheckResult.value.justSaved = true;
