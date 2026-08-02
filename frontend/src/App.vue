@@ -1552,7 +1552,7 @@ const saveLinkAll = async () => {
   await loadUserSubUrls();
   // 刷新内容库
   if (hadSummary) {
-    await loadArticles();
+    await loadUserLibrary();
   }
   // 1.5 秒后关闭预览
   setTimeout(() => {
@@ -1850,6 +1850,25 @@ onMounted(async () => {
   audioPlayer.load();
   hasAudio.value = true;
 });
+
+// 从 Worker KV 加载用户添加到内容库的文章
+const loadUserLibrary = async () => {
+  try {
+    const libRes = await fetch(`${API_BASE}/api/articles?t=${Date.now()}`);
+    if (libRes.ok) {
+      const libData = await libRes.json();
+      if (libData.success && Array.isArray(libData.articles)) {
+        for (const article of libData.articles) {
+          if (!rawArticles.value.find(a => a.url === article.url)) {
+            rawArticles.value.unshift(article);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('加载用户内容库失败:', e);
+  }
+};
 
 onUnmounted(() => {
   if (audioPlayer) {
