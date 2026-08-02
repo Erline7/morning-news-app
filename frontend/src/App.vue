@@ -1689,7 +1689,7 @@ const briefingData = computed(() => {
   return Object.entries(grouped).map(([category, items]) => ({ category, items }));
 });
 
-const githubTrending = computed(() => githubTrendingData.value.slice(0, 6));
+const githubTrending = computed(() => githubTrendingData.value.slice(0, 10));
 
 // --- Chat ---
 const chatInput = ref('');
