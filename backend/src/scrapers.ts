@@ -69,6 +69,7 @@ export async function fetchCLSHeadlines(): Promise<RawHeadline[]> {
       console.log('   [CLS] 🎯 正在提取位置: 主页 -> 热门文章排行榜');
       const listContainer = hotListTitle.next();
       listContainer.find('a').each((_: number, el: any) => {
+        if (headlines.length >= 5) return;  // 只取前 5 条
         let title = $(el).text().trim()
         const href = $(el).attr('href')
 
@@ -105,6 +106,7 @@ export async function fetchWallstreetHeadlines(): Promise<RawHeadline[]> {
     const items = response.data?.data?.day_items || [];
 
     for (const item of items) {
+      if (headlines.length >= 5) break;  // 只取前 5 条
       const title = item.title;
       const href = item.uri;
       if (title && href && href.includes('/articles/')) {
