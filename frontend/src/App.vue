@@ -1495,10 +1495,11 @@ const saveLink = async (urlOnly = false) => {
     urlCheckResult.value.justSaved = true;
     customUrl.value = '';
     await loadUserSubUrls();
-    // 3 秒后关闭预览
+    // 1.5 秒后关闭预览并跳转到我的链接
     setTimeout(() => {
       urlCheckResult.value = null;
-    }, 3000);
+      activeTab = 'subscriptions';
+    }, 1500);
   } catch (e) {
     console.error('保存链接失败:', e);
     urlCheckResult.value.error = '保存失败，请重试';
