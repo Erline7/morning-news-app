@@ -238,7 +238,9 @@ export async function generatePodcastScript(
 ): Promise<string> {
   const client = getClient(apiKey);
 
-  const prompt = `你是一个专业的中文个人电台主播。请将以下日刊简报，改写成一份专业的播客文稿，包含科技，经济等内容。
+  const prompt = `你是一个专业的中文个人电台主播。请将以下日刊简报，改写成一份简洁的播客文稿。
+
+  【字数要求】：全文控制在 800-1200 字以内，约 3-5 分钟阅读时长。只挑选最重要的 5-8 篇文章简要介绍，不要面面俱到。
 
   【极其核心的排版与格式要求（关系到 AI 朗读成败）】：
   这段文稿会直接提交给 TTS（文字转语音）引擎进行朗读。任何非口语的内容都会被引擎滑稽地读出来，因此：
@@ -248,13 +250,9 @@ export async function generatePodcastScript(
   4. 绝对不要使用 Markdown 的任何符号。
   5. 把所有大纲段落完全打散，重新融合成由"你"亲口说出来的一段连贯、温馨、带有人情味的对话。
   内容要求：
-  - 按文章类型灵活组织，不套模板。
-  - 技术发布/产品更新：亮点、关键特性、实际影响。
-  - 深度分析/观点：核心观点、论证逻辑、延伸思考。
-  - 事件/新闻：事件概述、背景脉络、行业影响。
-  - 教程/实践：问题背景、解决方案、应用场景。
-  - 研究/学术：研究发现、方法简介、意义与局限。
-  - 开源项目：项目定位、核心能力、使用场景。
+  - 每篇文章用 1-2 句话概括核心要点，不要展开细节。
+  - 用口语化的方式串联，像朋友聊天一样自然。
+  - 开头简短问候，结尾简短总结即可。
 
   简报内容如下：\n\n${briefing}`;
 
@@ -263,7 +261,7 @@ export async function generatePodcastScript(
     client.chat.completions.create({
       model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 10000,
+      max_tokens: 3000,
     }),
     180000  // 180 秒超时
   );
