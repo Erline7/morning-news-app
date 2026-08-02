@@ -206,7 +206,7 @@ export async function generateDailyBriefing(
     .sort((a, b) => (b.importance || 0) - (a.importance || 0))
     .slice(0, 10);
 
-  const prompt = `请根据以下财经情报，生成一份中文市场日刊简报，跳过争议性政治话题，全文约 8-10 分钟阅读时间。结构：
+  const prompt = `请根据以下情报，生成一份中文市场日刊简报，跳过争议性政治话题，全文约 8-10 分钟阅读时间。结构：
 # 今日市场全景
 # 今日重点事件
 # 关键实体与数据
@@ -261,7 +261,7 @@ export async function generatePodcastScript(
     client.chat.completions.create({
       model: 'LongCat-2.0',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 3000,
+      max_tokens: 8000,
     }),
     180000  // 180 秒超时
   );

@@ -1676,9 +1676,11 @@ const filteredArticles = computed(() => {
 const briefingData = computed(() => {
   const grouped = {};
   if (!rawArticles.value || !Array.isArray(rawArticles.value)) return [];
-  // 过滤掉 GitHub Trending
+  // 过滤掉 GitHub Trending，按重要性排序取前 10 篇
   const todayArticles = rawArticles.value
-    .filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending);
+    .filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending)
+    .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+    .slice(0, 10);
   todayArticles.forEach(article => {
     if (article.summary) {
       const cat = userEdits.value[article.url] || article.category;
