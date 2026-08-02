@@ -826,8 +826,8 @@
                 </div>
                 <p v-if="urlCheckResult.summary" class="text-xs text-gray-600 dark:text-gray-300 line-clamp-3">{{ urlCheckResult.summary }}</p>
                 <div class="flex gap-2 mt-3">
-                  <button @click="saveLink(false)" class="px-3 py-1.5 bg-[#2D3A5F] dark:bg-[#3D4F7C] text-white text-xs rounded-lg hover:bg-[#1f2844]">
-                    保存链接
+                  <button @click="saveLinkAll()" class="px-3 py-1.5 bg-[#2D3A5F] dark:bg-[#3D4F7C] text-white text-xs rounded-lg hover:bg-[#1f2844]">
+                    保存到内容库
                   </button>
                   <button @click="urlCheckResult = null" class="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-[#222]">
                     取消
@@ -838,8 +838,8 @@
                 <p class="font-medium">抓取失败</p>
                 <p class="text-xs text-gray-500 mt-1">{{ urlCheckResult.error || '无法读取该网站' }}</p>
                 <div class="flex gap-2 mt-3">
-                  <button @click="saveLink(true)" class="px-3 py-1.5 bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-300">
-                    仅保存 URL
+                  <button @click="saveLinkOnly()" class="px-3 py-1.5 bg-gray-200 dark:bg-[#333] text-gray-700 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-300">
+                    仅保存链接
                   </button>
                   <button @click="urlCheckResult = null" class="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-[#222]">
                     取消
