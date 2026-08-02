@@ -304,9 +304,23 @@
         <main v-else-if="activeTab === 'content'" class="max-w-5xl mx-auto px-8 md:px-12 py-12">
 
           <div v-if="!selectedArticle">
-            <div class="flex items-center mb-8">
+            <div class="flex items-center mb-6">
               <h2 class="text-2xl font-bold text-gray-900 dark:text-white">知识情报库</h2>
               <span class="ml-3 text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-[#222] px-3 py-1 rounded-full">{{ filteredArticles.length }} 篇</span>
+            </div>
+
+            <!-- 搜索框 -->
+            <div class="mb-4 relative">
+              <input
+                v-model="contentSearchQuery"
+                type="text"
+                placeholder="搜索文章标题、分类、来源..."
+                class="w-full px-4 py-2.5 pl-10 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 dark:text-gray-200"
+              />
+              <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <button v-if="contentSearchQuery" @click="contentSearchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X :size="14" />
+              </button>
             </div>
 
             <!-- Custom URL Input -->
@@ -442,7 +456,23 @@
                 <div class="flex-1"></div>
                 <div class="flex justify-between items-center text-xs text-gray-400 dark:text-gray-500 border-t border-gray-50 dark:border-gray-800/60 pt-4 mt-2">
                   <span class="font-medium truncate max-w-[70%]">{{ article.source }}</span>
-                  <span class="flex items-center whitespace-nowrap"><Clock :size="12" class="mr-1" />{{ formatDateDisplay(article.collectedAt) }}</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      @click.stop="toggleStar(article)"
+                      :title="article.isStarred ? '取消收藏' : '收藏'"
+                      class="p-1 rounded hover:bg-gray-100 dark:hover:bg-[#333] transition-colors"
+                    >
+                      <Star :size="14" :class="article.isStarred ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'" />
+                    </button>
+                    <button
+                      @click.stop="deleteArticle(article)"
+                      title="删除"
+                      class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-gray-400 hover:text-red-500"
+                    >
+                      <Trash2 :size="14" />
+                    </button>
+                    <span class="flex items-center whitespace-nowrap"><Clock :size="12" class="mr-1" />{{ formatDateDisplay(article.collectedAt) }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1169,6 +1199,7 @@ const notes = ref([]);
 const selectedNote = ref(null);
 const showArticlePicker = ref(false);
 const articleSearchQuery = ref('');
+const contentSearchQuery = ref('');
 const isNoteDirty = ref(false);
 const showCategoryEditor = ref(false);
 const editingArticle = ref(null);
@@ -1360,6 +1391,40 @@ const pickArticle = (article) => {
   selectedNote.value.linkedArticles.push({ url: article.url, title: article.title, summary: article.summary });
   markNoteDirty();
   showArticlePicker.value = false;
+};
+
+// 收藏文章（永久保存，不受30天清理影响）
+const toggleStar = async (article) => {
+  article.isStarred = !article.isStarred;
+  // 同步到 KV/R2
+  await fetch(`${API_BASE}/api/articles/star`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { url: article.url, isStarred: article.isStarred },
+  }).catch(() => {
+    // 失败则回滚
+    article.isStarred = !article.isStarred;
+  });
+  // 记录事件
+  if (article.isStarred) {
+    recordEvent('article_starred', article.title, { articles: [article.url], tags: [article.category].filter(Boolean) });
+  }
+};
+
+// 删除文章
+const deleteArticle = async (article) => {
+  if (!confirm(`确定要删除「${article.title}」吗？`)) return;
+  // 从列表中移除
+  rawArticles.value = rawArticles.value.filter(a => a.url !== article.url);
+  // 同步到后端（标记为删除或从 R2 移除）
+  await fetch(`${API_BASE}/api/articles/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { url: article.url },
+  }).catch(() => {
+    // 失败则回滚
+    rawArticles.value.push(article);
+  });
 };
 
 // 我的链接 / 自定义 URL
@@ -1686,7 +1751,19 @@ const stats = computed(() => {
 
 const filteredArticles = computed(() => {
   // 过滤掉 GitHub Trending（只在首页展示）
-  const mainArticles = rawArticles.value.filter(article => !article.isGithubTrending)
+  let mainArticles = rawArticles.value.filter(article => !article.isGithubTrending);
+
+  // 搜索过滤
+  const query = contentSearchQuery.value.toLowerCase().trim();
+  if (query) {
+    mainArticles = mainArticles.filter(a =>
+      a.title?.toLowerCase().includes(query) ||
+      a.category?.toLowerCase().includes(query) ||
+      a.source?.toLowerCase().includes(query) ||
+      a.summary?.toLowerCase().includes(query)
+    );
+  }
+
   if (activeFilter.value === '全部') return mainArticles;
   return mainArticles.filter(article => {
     const cat = userEdits.value[article.url] || article.category;
