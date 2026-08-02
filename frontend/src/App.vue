@@ -741,17 +741,34 @@
               <div class="p-6 border-b border-gray-100 dark:border-gray-800">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white">选择要关联的文章</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">点击文章插入为摘要超链接</p>
+                <!-- 搜索框 -->
+                <div class="mt-3 relative">
+                  <input
+                    v-model="articleSearchQuery"
+                    type="text"
+                    placeholder="搜索文章标题、分类、来源..."
+                    class="w-full px-4 py-2 pl-10 text-sm bg-gray-50 dark:bg-[#121212] border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 dark:text-gray-200"
+                  />
+                  <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <button v-if="articleSearchQuery" @click="articleSearchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X :size="14" />
+                  </button>
+                </div>
               </div>
               <div class="flex-1 overflow-y-auto p-4 space-y-2">
-                <button v-for="article in rawArticles" :key="article.url" @click="pickArticle(article)" class="w-full text-left p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-[#222] transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+                <button v-for="article in filteredPickerArticles" :key="article.url" @click="pickArticle(article)" class="w-full text-left p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-[#222] transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
                   <div class="text-sm font-medium text-gray-900 dark:text-white mb-1 line-clamp-1">{{ article.title }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{{ article.summary }}</div>
                   <div class="text-xs text-gray-400 dark:text-gray-500 mt-2 flex items-center gap-3">
                     <span>{{ article.category }}</span><span>{{ article.source }}</span><span>{{ formatDateDisplay(article.collectedAt) }}</span>
                   </div>
                 </button>
+                <div v-if="filteredPickerArticles.length === 0" class="text-center py-10 text-gray-400 text-sm">
+                  没有找到匹配的文章
+                </div>
               </div>
-              <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                <span class="text-xs text-gray-400">共 {{ filteredPickerArticles.length }} 篇</span>
                 <button @click="showArticlePicker = false" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#222] rounded-lg">取消</button>
               </div>
             </div>
@@ -1098,7 +1115,7 @@ import {
   ExternalLink, Play, Volume2, Clock, Moon, Sun,
   Bot, Send, Loader2, Briefcase, Zap,
   StickyNote, Plus, Trash2, Pencil, Calendar, Link, Rss,
-  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight
+  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight, Search, X
 } from 'lucide-vue-next';
 
 // --- State ---
@@ -1151,6 +1168,7 @@ let audioPlayer = null;
 const notes = ref([]);
 const selectedNote = ref(null);
 const showArticlePicker = ref(false);
+const articleSearchQuery = ref('');
 const isNoteDirty = ref(false);
 const showCategoryEditor = ref(false);
 const editingArticle = ref(null);
@@ -1332,7 +1350,10 @@ const deleteNote = async () => {
   await saveNotes();
 };
 
-const insertArticleLink = () => { showArticlePicker.value = true; };
+const insertArticleLink = () => {
+  articleSearchQuery.value = '';
+  showArticlePicker.value = true;
+};
 
 const pickArticle = (article) => {
   if (!selectedNote.value.linkedArticles) selectedNote.value.linkedArticles = [];
@@ -1692,6 +1713,18 @@ const briefingData = computed(() => {
 });
 
 const githubTrending = computed(() => githubTrendingData.value.slice(0, 10));
+
+// 文章选择器搜索过滤
+const filteredPickerArticles = computed(() => {
+  const query = articleSearchQuery.value.toLowerCase().trim();
+  if (!query) return rawArticles.value;
+  return rawArticles.value.filter(a =>
+    a.title?.toLowerCase().includes(query) ||
+    a.category?.toLowerCase().includes(query) ||
+    a.source?.toLowerCase().includes(query) ||
+    a.summary?.toLowerCase().includes(query)
+  );
+});
 
 // --- Chat ---
 const chatInput = ref('');
