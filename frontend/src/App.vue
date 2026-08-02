@@ -1418,14 +1418,18 @@ const deleteArticle = async (article) => {
   // 从列表中移除
   rawArticles.value = rawArticles.value.filter(a => a.url !== article.url);
   // 同步到后端（标记为删除或从 R2 移除）
-  await fetch(`${API_BASE}/api/articles/delete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: article.url }),
-  }).catch(() => {
+  try {
+    await fetch(`${API_BASE}/api/articles/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: article.url }),
+    });
+    // 删除成功后重新加载内容库（同步 KV 和 R2 的删除）
+    await loadUserLibrary();
+  } catch (e) {
     // 失败则回滚
     rawArticles.value.push(article);
-  });
+  }
 };
 
 // 我的链接 / 自定义 URL
@@ -1582,6 +1586,7 @@ const removeSubscription = async (url) => {
       body: JSON.stringify({ url, action: 'remove' }),
     });
     await loadUserSubUrls();
+    await loadUserLibrary();  // 同步刷新内容库
   } catch (e) {
     console.error('删除失败:', e);
   }
@@ -1611,6 +1616,7 @@ const addToLibrary = async (sub) => {
     console.log('添加到内容库结果:', data);  // 调试用
     if (data.success) {
       sub.inLibrary = true;
+      await loadUserLibrary();  // 刷新内容库
     }
   } catch (e) {
     console.error('添加到内容库失败:', e);
