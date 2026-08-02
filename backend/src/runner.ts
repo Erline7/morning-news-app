@@ -295,6 +295,16 @@ async function run() {
     fs.writeFileSync(path.join(cacheDir, 'daily_briefing.md'), briefing, 'utf-8')
     fs.writeFileSync(path.join(cacheDir, 'podcast_script.md'), script, 'utf-8')
 
+    // 保存简报到 KV（供前端读取）
+    await kvPut(`report:${today}`, JSON.stringify({
+      date: today,
+      briefing,
+      script,
+      audioUrl: '',
+      generatedAt: new Date().toISOString(),
+    }))
+    console.log(`   ✅ 简报已保存到 KV: report:${today}`)
+
     // TTS 合成（MiniMax TTS，无需代理）
     try {
       audioUrl = await synthesizeAudio(script, today, { retainLocal: false })
