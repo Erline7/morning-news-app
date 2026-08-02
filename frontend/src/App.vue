@@ -323,52 +323,52 @@
               </button>
             </div>
 
-            <!-- Custom URL Input -->
+            <!-- 添加链接 -->
             <div class="mb-6">
               <div class="flex items-center gap-2">
                 <input
                   v-model="customUrl"
                   @keydown.enter="handleAddUrl"
-                  placeholder="输入想追踪的网址（支持 RSS 订阅或单次抓取）..."
-                  class="flex-1 px-4 py-2.5 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/30"
+                  :disabled="isCheckingUrl"
+                  placeholder="输入文章链接，抓取并保存..."
+                  class="flex-1 px-4 py-2.5 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/30 disabled:opacity-60"
                 />
                 <button
                   @click="handleAddUrl"
                   :disabled="!customUrl.trim() || isCheckingUrl"
-                  class="px-4 py-2.5 bg-[#2D3A5F] dark:bg-[#3D4F7C] text-white text-sm font-medium rounded-lg hover:bg-[#1f2844] disabled:opacity-50 transition-all flex items-center"
+                  class="px-4 py-2.5 bg-[#2D3A5F] dark:bg-[#3D4F7C] text-white text-sm font-medium rounded-lg hover:bg-[#1f2844] disabled:opacity-50 transition-all flex items-center min-w-[90px] justify-center"
                 >
                   <Loader2 v-if="isCheckingUrl" :size="16" class="animate-spin" />
                   <span v-else class="flex items-center">
                     <Plus :size="16" class="mr-1" />
-                    添加
+                    抓取
                   </span>
                 </button>
               </div>
 
-              <!-- URL Check Result -->
-              <div v-if="urlCheckResult" class="mt-3 p-4 rounded-xl border" :class="urlCheckResult.fetchStrategy === 'failed' ? 'border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20' : 'border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20'">
+              <!-- 抓取结果预览 -->
+              <div v-if="urlCheckResult" class="mt-3 p-4 rounded-xl border" :class="urlCheckResult.success ? 'border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20' : 'border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20'">
                 <div class="flex items-start justify-between">
-                  <div class="flex-1">
-                    <div class="text-sm font-medium text-gray-900 dark:text-white mb-1">{{ urlCheckResult.title || urlCheckResult.url }}</div>
-                    <div class="text-xs text-gray-600 dark:text-gray-400 mb-2">{{ urlCheckResult.recommendation }}</div>
-                    <div v-if="urlCheckResult.rssUrl" class="text-xs text-gray-500 dark:text-gray-500">
-                      RSS: <a :href="urlCheckResult.rssUrl" target="_blank" class="text-blue-500 hover:underline">{{ urlCheckResult.rssUrl }}</a>
-                    </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-gray-900 dark:text-white mb-1 truncate">{{ urlCheckResult.title || urlCheckResult.url }}</div>
+                    <a :href="urlCheckResult.url" target="_blank" class="text-xs text-blue-500 hover:underline truncate block">{{ urlCheckResult.url }}</a>
+                    <p v-if="urlCheckResult.success" class="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-3">{{ urlCheckResult.summary }}</p>
+                    <p v-else class="text-xs text-red-500 mt-2">{{ urlCheckResult.error || '抓取失败，请手动填写或重试' }}</p>
                   </div>
-                  <div class="flex gap-2 ml-4">
+                  <div class="flex gap-2 ml-4 flex-shrink-0">
                     <button
-                      v-if="urlCheckResult.supportsRss || (urlCheckResult.sampleArticles && urlCheckResult.sampleArticles.length > 0)"
-                      @click="subscribeUrl"
-                      class="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                      v-if="urlCheckResult.success"
+                      @click="saveLink(false)"
+                      class="px-3 py-1.5 text-xs bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors whitespace-nowrap"
                     >
-                      订阅（每日）
+                      保存
                     </button>
                     <button
-                      v-if="urlCheckResult.fetchStrategy !== 'failed'"
-                      @click="fetchUrlNow"
-                      class="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      v-if="!urlCheckResult.success"
+                      @click="saveLink(true)"
+                      class="px-3 py-1.5 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors whitespace-nowrap"
                     >
-                      立即抓取
+                      仅保存 URL
                     </button>
                     <button
                       @click="urlCheckResult = null"
@@ -378,26 +378,10 @@
                     </button>
                   </div>
                 </div>
-
-                <!-- 预览文章列表 -->
-                <div v-if="urlCheckResult.sampleArticles && urlCheckResult.sampleArticles.length > 0" class="mt-3">
-                  <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">检测到以下文章：</div>
-                  <div class="space-y-1">
-                    <a
-                      v-for="(article, idx) in urlCheckResult.sampleArticles"
-                      :key="idx"
-                      :href="article.url"
-                      target="_blank"
-                      class="block text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
-                    >
-                      {{ idx + 1 }}. {{ article.title }}
-                    </a>
-                  </div>
-                </div>
-
-                <!-- 内容预览 -->
-                <div v-if="urlCheckResult.sampleContent && (!urlCheckResult.sampleArticles || urlCheckResult.sampleArticles.length === 0)" class="mt-3 p-3 bg-white dark:bg-[#121212] rounded-lg text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
-                  {{ urlCheckResult.sampleContent }}
+                <!-- 成功提示 -->
+                <div v-if="urlCheckResult.success && urlCheckResult.justSaved" class="mt-3 p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs rounded-lg flex items-center">
+                  <Check :size="14" class="mr-1.5" />
+                  保存成功！已添加到"我的链接"
                 </div>
               </div>
             </div>
@@ -1145,7 +1129,7 @@ import {
   ExternalLink, Play, Volume2, Clock, Moon, Sun,
   Bot, Send, Loader2, Briefcase, Zap,
   StickyNote, Plus, Trash2, Pencil, Calendar, Link, Rss,
-  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight, Search, X
+  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight, Search, X, Check
 } from 'lucide-vue-next';
 
 // --- State ---
@@ -1485,11 +1469,17 @@ const saveLink = async (urlOnly = false) => {
         action: 'add',
       }),
     });
-    urlCheckResult.value = null;
+    // 显示成功提示
+    urlCheckResult.value.justSaved = true;
     customUrl.value = '';
     await loadUserSubUrls();
+    // 3 秒后关闭预览
+    setTimeout(() => {
+      urlCheckResult.value = null;
+    }, 3000);
   } catch (e) {
     console.error('保存链接失败:', e);
+    urlCheckResult.value.error = '保存失败，请重试';
   }
 };
 
