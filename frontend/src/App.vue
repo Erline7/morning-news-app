@@ -1421,7 +1421,7 @@ const deleteArticle = async (article) => {
   await fetch(`${API_BASE}/api/articles/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: { url: article.url },
+    body: JSON.stringify({ url: article.url }),
   }).catch(() => {
     // 失败则回滚
     rawArticles.value.push(article);
