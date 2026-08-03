@@ -247,7 +247,12 @@
 
             <div class="bg-white dark:bg-[#1A1A1A] p-8 md:p-10 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden">
               <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-8 pb-4 border-b border-gray-100 dark:border-gray-800">今日要点</h2>
-              <div class="space-y-8">
+
+              <!-- 优先显示 KV 里的 AI 生成简报 -->
+              <div v-if="dailyBriefing" class="prose prose-lg text-gray-700 dark:text-gray-300 leading-relaxed max-w-none whitespace-pre-wrap" v-html="formatBriefing(dailyBriefing)"></div>
+
+              <!-- Fallback：本地聚合的分类摘要 -->
+              <div v-else class="space-y-8">
                 <div v-for="(section, sIdx) in briefingData" :key="sIdx">
                   <h3 class="text-[15px] font-bold text-gray-900 dark:text-white mb-3 flex items-center">
                     <span class="mr-2">{{ getCategoryEmoji(section.category) }}</span> {{ section.category }}
@@ -261,7 +266,8 @@
                   </div>
                 </div>
               </div>
-              <div v-if="briefingData.length === 0" class="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">
+
+              <div v-if="!dailyBriefing && briefingData.length === 0" class="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">
                 <p>今天暂无高优情报更新</p>
               </div>
             </div>
@@ -1213,6 +1219,8 @@ const userSubUrls = ref([]);
 // --- Daily Report State ---
 const dailyReport = ref(null);
 const isGeneratingReport = ref(false);
+const dailyBriefing = ref('');  // KV 里存储的 AI 生成简报全文
+const dailyScript = ref('');    // 播客脚本
 
 // --- Timeline & Memory State ---
 const timelineEvents = ref([]);
@@ -1301,10 +1309,6 @@ const loadUserSubUrls = async () => {
     const res = await fetch(`${API_BASE}/api/user-urls?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
-      console.log('=== /api/user-urls 返回数据 ===');
-      console.log('完整 data:', data);
-      console.log('第一个链接:', data.urls?.[0]);
-      console.log('=== 结束 ===');
       userSubUrls.value = data.urls || [];
     }
   } catch (e) {
@@ -1396,16 +1400,20 @@ const pickArticle = (article) => {
 
 // 收藏文章（永久保存，不受30天清理影响）
 const toggleStar = async (article) => {
+  const previousState = article.isStarred;
   article.isStarred = !article.isStarred;
   // 同步到 KV/R2
-  await fetch(`${API_BASE}/api/articles/star`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: { url: article.url, isStarred: article.isStarred },
-  }).catch(() => {
+  try {
+    const res = await fetch(`${API_BASE}/api/articles/star`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: article.url, isStarred: article.isStarred }),
+    });
+    if (!res.ok) throw new Error('保存失败');
+  } catch {
     // 失败则回滚
-    article.isStarred = !article.isStarred;
-  });
+    article.isStarred = previousState;
+  }
   // 记录事件
   if (article.isStarred) {
     recordEvent('article_starred', article.title, { articles: [article.url], tags: [article.category].filter(Boolean) });
@@ -1642,6 +1650,44 @@ const loadReport = async () => {
   }
 };
 
+// 加载今日简报（从 KV 读取 AI 生成的完整简报文本）
+const loadBriefing = async () => {
+  const dateKey = new Date().toISOString().split('T')[0];
+  try {
+    const res = await fetch(`${API_BASE}/api/report?date=${dateKey}&t=${Date.now()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.report) {
+        dailyBriefing.value = data.report.briefing || '';
+        dailyScript.value = data.report.script || '';
+      }
+    }
+  } catch (e) {
+    console.warn('加载简报失败:', e);
+  }
+};
+
+// 将 Markdown 简报转为简单 HTML（支持标题、段落、列表）
+const formatBriefing = (text) => {
+  if (!text) return '';
+  // 转义 HTML 特殊字符
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  // 标题 # ## ###
+  html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-gray-900 dark:text-white mt-6 mb-2">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">$1</h1>');
+  // 列表项
+  html = html.replace(/^- (.+)$/gm, '<li class="ml-4 text-gray-700 dark:text-gray-300 list-disc">$1</li>');
+  // 段落（空行分隔）
+  html = html.replace(/\n\n/g, '</p><p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">');
+  // 剩余换行
+  html = html.replace(/\n/g, '<br>');
+  return `<p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">${html}</p>`;
+};
+
 const generateReport = async () => {
   isGeneratingReport.value = true;
   try {
@@ -1838,7 +1884,7 @@ onMounted(async () => {
       githubTrendingData.value = await githubRes.json();
     }
 
-    await Promise.all([loadUserEdits(), loadNotes(), loadUserSubUrls()]);
+    await Promise.all([loadUserEdits(), loadNotes(), loadUserSubUrls(), loadBriefing()]);
     availableCategories.value = [...new Set([...stats.value.map(s => s.label)])];
   } catch (error) {
     console.error('加载历史数据失败:', error);
@@ -1851,24 +1897,28 @@ onMounted(async () => {
   window.audioPlayer = audioPlayer;
   audioPlayer.addEventListener('ended', () => { isPlaying.value = false; });
   audioPlayer.addEventListener('error', () => { hasAudio.value = false; });
+  audioPlayer.addEventListener('canplay', () => { hasAudio.value = true; });
   audioPlayer.volume = 1;
   audioPlayer.muted = false;
   audioPlayer.load();
-  hasAudio.value = true;
 });
 
 // 从 Worker KV 加载用户添加到内容库的文章
+// 策略：完全用 Worker 端数据覆盖本地，保证与后端一致
 const loadUserLibrary = async () => {
   try {
     const libRes = await fetch(`${API_BASE}/api/articles?t=${Date.now()}`);
     if (libRes.ok) {
       const libData = await libRes.json();
       if (libData.success && Array.isArray(libData.articles)) {
+        // 将用户文章按 url 建立索引
+        const userArticlesMap = new Map();
         for (const article of libData.articles) {
-          if (!rawArticles.value.find(a => a.url === article.url)) {
-            rawArticles.value.unshift(article);
-          }
+          userArticlesMap.set(article.url, { ...article, isUserAdded: true });
         }
+        // 更新 rawArticles：保留非用户文章 + 用用户数据覆盖
+        const nonUserArticles = rawArticles.value.filter(a => !a.isUserAdded);
+        rawArticles.value = [...libData.articles, ...nonUserArticles];
       }
     }
   } catch (e) {
