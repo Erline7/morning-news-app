@@ -1667,27 +1667,21 @@ const loadBriefing = async () => {
   }
 };
 
-// 将 Markdown 简报转为简单 HTML
+// 将简报文本转为 HTML（处理标题、列表、段落）
+// 注意：Worker 端已清除 ** 粗体标记，这里只做结构渲染
 const formatBriefing = (text) => {
   if (!text) return '';
-  // 转义 HTML 特殊字符（但保留换行）
+  // 转义 HTML 特殊字符
   let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // 先处理多行结构（避免冲突）
-  // 标题 # ## ###（必须在 ** 之前处理，避免 # 被粗体包裹）
+  // 标题 # ## ### ####
   html = html.replace(/^#### (.+)$/gm, '<h4 class="text-base font-bold text-gray-900 dark:text-white mt-4 mb-2">$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-gray-900 dark:text-white mt-6 mb-2">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-10 mb-4">$1</h1>');
-
-  // 粗体 **text** → <strong>
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-white">$1</strong>');
-
-  // 斜体 *text* → <em>
-  html = html.replace(/\*(.+?)\*/g, '<em class="italic">$1</em>');
 
   // 列表项 - text 或 * text
   html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4 text-gray-700 dark:text-gray-300 list-disc list-inside">$1</li>');
@@ -1700,7 +1694,7 @@ const formatBriefing = (text) => {
     if (!trimmed) return '';
     // 如果已经是块级元素（标题、列表），不包裹 <p>
     if (trimmed.startsWith('<h') || trimmed.startsWith('<li')) return trimmed;
-    // 普通段落，处理内部换行
+    // 普通段落，内部单换行转为 <br>
     const content = trimmed.replace(/\n/g, '<br>');
     return `<p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">${content}</p>`;
   }).join('\n');
