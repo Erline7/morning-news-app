@@ -19,6 +19,8 @@ export interface ArticleContent {
   source: string // 文章来源
   collectedAt: string // 文章收集时间
   content: string // 文章正文内容
+  isEmail?: boolean  // 是否为邮件源
+  preFetchedContent?: string // 预抓取内容
 }
 // 结构化情报层：大模型分析出的多维结构化 JSON 数据
 export interface ArticleIntelligence {
@@ -40,6 +42,9 @@ export interface ArticleIntelligence {
   isStarred?: boolean       // 是否被标星/收藏，默认 false
   unstarredAt?: string     // 记录取消收藏的时间戳（ISO字符串），默认为空
   isUserAdded?: boolean     // 是否为用户自定义添加
+  isEmail?: boolean         // 是否为邮件源
+  content?: string          // 原始正文（截断到5000字），用于详情页展示
+  isGithubTrending?: boolean // 是否为 GitHub Trending
 }
 // 聚类层：对多篇文章进行事件聚合后的状态
 export interface EventCluster {

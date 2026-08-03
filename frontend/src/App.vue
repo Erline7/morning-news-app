@@ -506,14 +506,29 @@
                 <p>{{ selectedArticle.summary }}</p>
               </div>
 
+              <!-- 邮件/原始内容展示 -->
+              <div v-if="selectedArticle.content" class="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+                <div class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 flex items-center">
+                  <BookOpen :size="14" class="mr-2" />
+                  {{ selectedArticle.isEmail ? '邮件原文' : '原文内容' }}
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-gray-50 dark:bg-[#121212] rounded-xl p-5">
+                  {{ selectedArticle.content }}
+                </div>
+              </div>
+
               <div class="mt-10 pt-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-sm">
                 <a
+                  v-if="selectedArticle.url && selectedArticle.url.startsWith('http')"
                   :href="selectedArticle.url"
                   target="_blank"
                   class="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
                 >
                   阅读原文 <ExternalLink :size="16" class="ml-1" />
                 </a>
+                <span v-else class="text-gray-400 dark:text-gray-500 text-sm flex items-center">
+                  <Mail :size="14" class="mr-1.5" /> 邮件内容
+                </span>
                 <span class="text-gray-400 dark:text-gray-500 flex items-center">
                   <Clock :size="14" class="mr-1" />
                   {{ formatDateDisplay(selectedArticle.collectedAt) }}
@@ -1148,7 +1163,7 @@ import {
   ExternalLink, Play, Volume2, Clock, Moon, Sun,
   Bot, Send, Loader2, Briefcase, Zap,
   StickyNote, Plus, Trash2, Pencil, Calendar, Link, Rss,
-  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight, Search, X, Check
+  ClipboardList, RefreshCw, GitBranch, Tag, Sparkles, ChevronRight, Search, X, Check, Mail
 } from 'lucide-vue-next';
 
 // --- State ---

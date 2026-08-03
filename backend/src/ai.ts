@@ -185,6 +185,9 @@ ${relatedGuide}
       relatedTopics: Array.isArray(parsed.relatedTopics) ? parsed.relatedTopics : [],
       questions: Array.isArray(parsed.questions) ? parsed.questions.slice(0, 3) : [],
       personalThinkingPrompt: parsed.personalThinkingPrompt ?? '',
+      // 保留原始内容（截断到 5000 字），用于前端详情页展示
+      content: content.content ? content.content.slice(0, 5000) : '',
+      isEmail: content.isEmail || false,
     };
   } catch (error: any) {
     console.error(`[AI] 分析失败: ${content.title?.slice(0, 30)}... | ${error.message}`);
