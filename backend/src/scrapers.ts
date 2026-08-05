@@ -307,11 +307,54 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
   return headlines;
 }
 
+// ==================== Aivalley (Beehiiv) ====================
+
+/**
+ * 抓取 Aivalley 最新文章列表
+ * Beehiiv 平台通用模式
+ */
+export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
+  const headlines: RawHeadline[] = [];
+  const BASE_URL = 'https://www.theaivalley.com';
+
+  try {
+    // Beehiiv 的归档页面通常在 /archive
+    const response = await requestWithRetry(`${BASE_URL}/archive`, { timeout: 25000 });
+    const $ = load(response.data);
+
+    // Beehiiv 的文章链接格式: /p/article-slug
+    $('a[href*="/p/"]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const title = $(el).text().trim();
+
+      // 过滤掉非文章链接（标题太短的可能是导航）
+      if (title.length < 10) return;
+
+      const url = href.startsWith('http') ? href : `${BASE_URL}${href}`;
+
+      // 去重
+      if (!headlines.find(h => h.url === url)) {
+        headlines.push({
+          title,
+          url,
+          source: 'Aivalley',
+          collectedAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    console.log(`   [Aivalley] 抓取到 ${headlines.length} 篇文章`);
+  } catch (error: any) {
+    console.log(`   ⚠️ [Aivalley] 抓取失败: ${error.message}`);
+  }
+
+  return headlines.slice(0, 10); // 最多取 10 篇
+}
+
 // ==================== Hacker News ====================
 
 /**
  * 抓取 Hacker News 前 5 条热门
- * https://news.ycombinator.com/front
  */
 export async function fetchHackerNewsHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = []
