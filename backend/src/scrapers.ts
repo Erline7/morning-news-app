@@ -367,7 +367,14 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
     $ = load(newsletterRes.data);
 
     // Step 4: 提取所有子文章
-    // Beehiiv 文章结构: <a href="/p/xxx"> 包含标题和摘要
+    // 调试：打印页面里所有带 /p/ 的链接
+    console.log('   [Aivalley] 页面中所有 /p/ 链接:');
+    $('a[href*="/p/"]').each((i, el) => {
+      const href = $(el).attr('href');
+      const text = $(el).text().replace(/\s+/g, ' ').trim().slice(0, 50);
+      console.log(`   ${i + 1}. href="${href}" text="${text}..."`);
+    });
+
     const seenUrls = new Set<string>();
 
     $('a[href*="/p/"]').each((_, el) => {
