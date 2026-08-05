@@ -366,43 +366,36 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
 
     $ = load(newsletterRes.data);
 
-    // Step 4: 提取所有子文章
-    // 调试：打印页面里所有带 /p/ 的链接
-    console.log('   [Aivalley] 页面中所有 /p/ 链接:');
-    $('a[href*="/p/"]').each((i, el) => {
-      const href = $(el).attr('href');
-      const text = $(el).text().replace(/\s+/g, ' ').trim().slice(0, 50);
-      console.log(`   ${i + 1}. href="${href}" text="${text}..."`);
-    });
+    $ = load(newsletterRes.data);
 
-    const seenUrls = new Set<string>();
+    // Step 4: Newsletter 里所有子文章都在同一个页面
+    // 结构: <h2>文章标题</h2> + 正文内容
+    // 策略: 找所有 <h2> 标题，每个标题对应一篇子文章
 
-    $('a[href*="/p/"]').each((_, el) => {
-      const href = $(el).attr('href');
-      if (!href || !href.match(/^\/p\/[a-z0-9-]+$/)) return;
+    const h2Elements = $('h2');
+    console.log(`   [Aivalley] 找到 ${h2Elements.length} 个 h2 标题`);
 
-      const url = `${BASE_URL}${href}`;
-      if (seenUrls.has(url)) return;
+    h2Elements.each((i, el) => {
+      const title = $(el).text().trim();
+      if (title.length < 5) return;
 
-      // 提取标题：找 h2/h3 或者链接内文字最长的部分
-      let title = '';
-      const h2 = $(el).find('h2, h3').first();
-      if (h2.length) {
-        title = h2.text().trim();
-      } else {
-        title = $(el).text().replace(/\s+/g, ' ').trim();
+      // 提取这个 h2 到下一个 h2 之间的内容
+      let content = '';
+      let next = $(el).next();
+      while (next.length && !next.is('h2')) {
+        content += next.text().trim() + ' ';
+        next = next.next();
       }
 
-      // 过滤
-      if (title.length < 10) return;
-      if (title.includes('View archive') || title.includes('Unsubscribe')) return;
+      // 只保留有足够内容的
+      if (content.length < 50) return;
 
-      seenUrls.add(url);
       headlines.push({
         title,
-        url,
+        url: latestNewsletterUrl + `#article-${i}`, // 用锚点标记
         source: 'Aivalley',
         collectedAt: new Date().toISOString(),
+        preFetchedContent: content.slice(0, 3000), // 传入预抓取的内容
       });
     });
 
