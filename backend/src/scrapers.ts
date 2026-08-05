@@ -336,6 +336,10 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
       return [];
     }
 
+    // 调试：打印前 2000 字符
+    console.log('   [Aivalley] Archive 返回内容（前 2000 字符）:');
+    console.log(archiveRes.data.slice(0, 2000));
+
     // 找第一个 /p/ 链接（最新一期 Newsletter）
     const firstLinkMatch = /\[([^\]]{10,})\]\((\/p\/[^\)]+)\)/.exec(archiveRes.data);
     if (!firstLinkMatch) {
