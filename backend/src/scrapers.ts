@@ -311,7 +311,12 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
 
 /**
  * 抓取 Aivalley 最新一期 Newsletter
- * 策略: 把整个页面文本交给 AI 分析和拆解
+ *
+ * Newsletter 结构:
+ * - THROUGH THE VALLEY: 深度分析文章 (1/ 2/ 3/ 分隔)
+ * - TRENDING TOOLS: 热门工具链接列表
+ * - WHAT I'M CONSUMING: 链接 + AI 总结
+ * - THE VALLEY GEMS: 链接 + AI 总结
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
@@ -328,7 +333,6 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
 
     let $ = load(archiveRes.data);
 
-    // 找第一个 /p/ 链接（最新一期 Newsletter）
     let latestNewsletterUrl: string | null = null;
     $('a[href*="/p/"]').each((_, el) => {
       if (latestNewsletterUrl) return;
@@ -344,7 +348,7 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
     }
     console.log(`   [Aivalley] 最新一期: ${latestNewsletterUrl}`);
 
-    // Step 2: 抓取最新一期 Newsletter 页面全文
+    // Step 2: 抓取 Newsletter 全文
     const newsletterRes = await requestWithRetry(latestNewsletterUrl, {
       timeout: 20000
     }, 2, 2000);
@@ -352,16 +356,13 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
     if (!newsletterRes.data) return [];
 
     $ = load(newsletterRes.data);
-
-    // Step 3: 提取页面所有文本和链接
     $('script, style, noscript, iframe, nav, footer, header').remove();
 
     const mainContent = $('article, main, .body, .content, #content, .newsletter-body').first();
     const textContent = mainContent.length ? mainContent.text() : $('body').text();
-
     const cleanText = textContent.replace(/\s+/g, ' ').trim();
 
-    // 提取页面上所有外部链接（供 AI 参考）
+    // 提取所有外部链接
     const links: string[] = [];
     $('a[href^="http"]').each((_, el) => {
       const href = $(el).attr('href');
@@ -373,13 +374,13 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
 
     console.log(`   [Aivalley] 提取到 ${cleanText.length} 字文本, ${links.length} 个外部链接`);
 
-    // Step 4: 作为一篇文章返回，正文包含文本和链接
+    // Step 3: 返回给 AI 分析
     headlines.push({
       title: 'Aivalley Newsletter',
       url: latestNewsletterUrl,
       source: 'Aivalley',
       collectedAt: new Date().toISOString(),
-      preFetchedContent: cleanText.slice(0, 8000) + '\n\n--- 页面中的链接 ---\n' + links.join('\n'),
+      preFetchedContent: cleanText.slice(0, 10000) + '\n\n--- 页面中的外部链接 ---\n' + links.join('\n'),
     });
 
   } catch (error: any) {

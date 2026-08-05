@@ -60,10 +60,10 @@ export async function analyzeArticle(
   const categoryGuide = `请先评估是否能归入以下既定分类：[${categoryPool.join(', ')}]。
 若完全不匹配，允许你根据核心领域自行创建一个简短的、政治中立的、字数在 2-6 字之间的专业新分类（例如 '生物医药', '新能源', '半导体'），切记不要创建意义重合的分类。**分类名必须是中文，不要用英文。**`;
 
-  // 特殊处理：Aivalley Newsletter 需要拆分成多篇文章
+  // 特殊处理：Aivalley Newsletter 需要按区域拆分
   const isAivalleyNewsletter = content.source === 'Aivalley' && content.title === 'Aivalley Newsletter';
   const newsletterGuide = isAivalleyNewsletter
-    ? `\n\n**重要：这是一份 Newsletter，包含多篇文章。请按以下格式输出 JSON 数组：**\n[\n  {"title": "子文章1标题", "summary": "...", "category": "...", "importance": 7, "keywords": [...], "entities": [...], "timeline": [...], "relatedTopics": [...], "questions": [...], "personalThinkingPrompt": "..."},\n  {"title": "子文章2标题", ...}\n]\n每个子文章独立分析，summary 保持原文中的链接。`
+    ? `\n\n**重要：这是 Aivalley Newsletter，包含 4 个固定区域。请按以下结构输出 JSON 数组：**\n\n1. THROUGH THE VALLEY（深度分析）: 按 "1/" "2/" "3/" 分隔成独立文章，每篇输出一个对象\n   - title: "Through the Valley: [该部分主题]"\n   - summary: 包含原文链接\n\n2. TRENDING TOOLS（热门工具）: 每个工具一个对象\n   - title: 工具名称\n   - summary: "🔧 工具链接: [URL]"\n\n3. WHAT I'M CONSUMING（我在消费）: 每个链接一个对象，AI 总结内容\n   - title: 链接标题\n   - summary: AI 总结 + 链接\n\n4. THE VALLEY GEMS（精选）: 同 WHAT I'M CONSUMING\n   - title: 链接标题\n   - summary: AI 总结 + 链接\n\n输出格式：\n[\n  {"title": "Through the Valley: xxx", "summary": "...", "category": "AI/科技", "importance": 7, "keywords": [...], "entities": [...], "timeline": [], "relatedTopics": [], "questions": [], "personalThinkingPrompt": ""},\n  {"title": "🔧 工具名", "summary": "🔧 工具链接: https://...", "category": "工具", "importance": 5, "keywords": [], "entities": [], "timeline": [], "relatedTopics": [], "questions": [], "personalThinkingPrompt": ""},\n  ...\n]`
     : '';
 
   const recentTitles = ctx?.recentArticleTitles ?? [];
