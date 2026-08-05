@@ -1,18 +1,13 @@
-import fs from 'fs/promises';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+/**
+ * TTS 音频合成模块（MiniMax）
+ */
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT!,
-  credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
-  },
-});
+import fs from 'fs/promises';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { getR2Client } from './utils.js';
 
 /**
  * 使用 MiniMax TTS 同步接口生成语音
- * 文档: https://platform.minimax.io/document/tts
  */
 async function generateSpeech(text: string): Promise<Buffer> {
   const apiKey = process.env.MINIMAX_API_KEY;
@@ -30,7 +25,7 @@ async function generateSpeech(text: string): Promise<Buffer> {
       model: 'speech-02-hd',
       text: text.substring(0, 5000),
       voice_setting: {
-        voice_id: 'female-shaonv',  // 女声
+        voice_id: 'female-shaonv',
         speed: 1.0,
         vol: 1.0,
         pitch: 0,
@@ -50,12 +45,10 @@ async function generateSpeech(text: string): Promise<Buffer> {
 
   const data = await res.json();
 
-  // 成功时返回 base64 编码的音频
   if (data.data?.audio) {
     return Buffer.from(data.data.audio, 'hex');
   }
 
-  // 检查错误
   if (data.base_resp?.status_code !== 0) {
     throw new Error(`MiniMax 错误: ${data.base_resp?.status_msg || '未知错误'}`);
   }
@@ -93,8 +86,9 @@ export async function synthesizeAudio(
 
     await fs.writeFile(outputFile, audioBuffer);
 
-    const key = `podcast/${date}.mp3`;
-    await r2Client.send(new PutObjectCommand({
+    const key = `podcasts/${date}.mp3`;
+    const r2 = getR2Client();
+    await r2.send(new PutObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME!,
       Key: key,
       Body: audioBuffer,

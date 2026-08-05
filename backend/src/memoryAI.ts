@@ -1,55 +1,38 @@
-import OpenAI from 'openai'
-import { MemoryEvent, ThinkingThread, DailyTimelineAnalysis } from './types.js'
-import { loadThreads, saveThreads, loadTimelineAnalysis, saveTimelineAnalysis } from './memory.js'
+/**
+ * 记忆系统 - AI 分析层
+ * 调用 LLM 进行时间线分析、脉络摘要、建议生成
+ */
 
-let _client: OpenAI | null = null
+import OpenAI from 'openai';
+import { MemoryEvent, ThinkingThread, DailyTimelineAnalysis } from './types.js';
+import {
+  loadThreads, saveThreads, saveTimelineAnalysis, loadTimelineAnalysis,
+  loadEvents, applyDecay, matchEventToThreads, activateThread, appendEvent,
+  cleanupOldEvents
+} from './memory.js';
+import { parseAiJson, withTimeout } from './utils.js';
+
+// ====================== AI 客户端 ======================
+
+let _client: OpenAI | null = null;
 function getClient(): OpenAI {
   if (!_client) {
     _client = new OpenAI({
       apiKey: process.env.DASHSCOPE_API_KEY,
       baseURL: "https://api.longcat.chat/openai/v1",
       maxRetries: 0,
-    })
+    });
   }
-  return _client
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: any
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
-  })
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer))
-}
-
-function parseAiJson(rawText: string): any {
-  if (!rawText) return {}
-  let text = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
-  try { return JSON.parse(text) } catch {}
-  const firstBrace = text.indexOf('{')
-  if (firstBrace === -1) return {}
-  let depth = 0, endPos = -1
-  for (let i = firstBrace; i < text.length; i++) {
-    if (text[i] === '{') depth++
-    if (text[i] === '}') depth--
-    if (depth === 0) { endPos = i; break }
-  }
-  if (endPos === -1) return {}
-  const candidate = text.slice(firstBrace, endPos + 1).replace(/,\s*([}\]])/g, '$1')
-  try { return JSON.parse(candidate) } catch { return {} }
+  return _client;
 }
 
 // ====================== AI 每日时间线分析 ======================
 
-/**
- * 分析当日事件流，生成叙事 + 复盘问题
- */
 export async function analyzeDailyTimeline(
   events: MemoryEvent[],
   date: string,
   apiKey: string
 ): Promise<DailyTimelineAnalysis> {
-  // 如果没有事件，返回空分析
   if (events.length === 0) {
     return {
       date,
@@ -57,18 +40,18 @@ export async function analyzeDailyTimeline(
       narrative: '今天还没有记录任何行为。',
       followUpQuestions: ['今天有什么让你思考的事情吗？'],
       activeThreadIds: []
-    }
+    };
   }
 
-  const client = getClient()
+  const client = getClient();
 
   const eventsSummary = events.map(e => {
-    const time = new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    let line = `${time} [${e.type}] ${e.title}`
-    if (e.content) line += ` | ${e.content.slice(0, 80)}`
-    if (e.tags.length > 0) line += ` | 标签: ${e.tags.join(', ')}`
-    return line
-  }).join('\n')
+    const time = new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    let line = `${time} [${e.type}] ${e.title}`;
+    if (e.content) line += ` | ${e.content.slice(0, 80)}`;
+    if (e.tags.length > 0) line += ` | 标签: ${e.tags.join(', ')}`;
+    return line;
+  }).join('\n');
 
   const prompt = `你是一个个人思考教练。根据以下用户今天的行为时间线，生成：
 1. 一段叙事（2-3句话，串联今天的核心思考脉络）
@@ -81,7 +64,7 @@ ${eventsSummary}
 {
   "narrative": "叙事（中文，100字以内）",
   "followUpQuestions": ["问题1", "问题2", "问题3"]
-}`
+}`;
 
   try {
     const response = await withTimeout(
@@ -91,10 +74,10 @@ ${eventsSummary}
         max_tokens: 1000,
       }),
       60000
-    )
+    );
 
-    const rawText = response.choices?.[0]?.message?.content ?? ''
-    const parsed = parseAiJson(rawText)
+    const rawText = response.choices?.[0]?.message?.content ?? '';
+    const parsed = parseAiJson(rawText);
 
     return {
       date,
@@ -104,37 +87,34 @@ ${eventsSummary}
         ? parsed.followUpQuestions.slice(0, 3)
         : [],
       activeThreadIds: []
-    }
+    };
   } catch (error: any) {
-    console.error(`[Memory] 每日时间线分析失败: ${error.message}`)
+    console.error(`[Memory] 每日时间线分析失败: ${error.message}`);
     return {
       date,
       events,
       narrative: '今天有 ' + events.length + ' 条行为记录。',
       followUpQuestions: [],
       activeThreadIds: []
-    }
+    };
   }
 }
 
 // ====================== AI 脉络摘要更新 ======================
 
-/**
- * 当脉络有足够事件后，让 AI 生成/更新脉络摘要
- */
 export async function updateThreadSummary(
   thread: ThinkingThread,
   events: MemoryEvent[],
   apiKey: string
 ): Promise<string> {
-  if (events.length < 2) return '' // 事件太少不生成摘要
+  if (events.length < 2) return '';
 
-  const client = getClient()
+  const client = getClient();
 
   const eventsSummary = events.map(e => {
-    const date = e.timestamp.slice(0, 10)
-    return `${date}: ${e.title}`
-  }).join('\n')
+    const date = e.timestamp.slice(0, 10);
+    return `${date}: ${e.title}`;
+  }).join('\n');
 
   const prompt = `以下是用户围绕"${thread.theme}"主题的一系列行为，请用一句话（30字以内）总结这条思考脉络的走向。
 
@@ -143,7 +123,7 @@ ${eventsSummary}
 只输出 JSON：
 {
   "summary": "从A到B到C的思考脉络"
-}`
+}`;
 
   try {
     const response = await withTimeout(
@@ -153,31 +133,28 @@ ${eventsSummary}
         max_tokens: 200,
       }),
       30000
-    )
+    );
 
-    const rawText = response.choices?.[0]?.message?.content ?? ''
-    const parsed = parseAiJson(rawText)
-    return parsed.summary || ''
+    const rawText = response.choices?.[0]?.message?.content ?? '';
+    const parsed = parseAiJson(rawText);
+    return parsed.summary || '';
   } catch {
-    return ''
+    return '';
   }
 }
 
 // ====================== AI 脉络建议生成 ======================
 
-/**
- * 为活跃脉络生成下一步建议
- */
 export async function generateThreadSuggestion(
   thread: ThinkingThread,
   events: MemoryEvent[],
   apiKey: string
 ): Promise<string> {
-  if (events.length < 3) return '' // 事件太少不建议
+  if (events.length < 3) return '';
 
-  const client = getClient()
+  const client = getClient();
 
-  const recentEvents = events.slice(-5).map(e => e.title).join(', ')
+  const recentEvents = events.slice(-5).map(e => e.title).join(', ');
 
   const prompt = `用户在"${thread.theme}"这个话题上已经持续思考了多天，最近的行为是：${recentEvents}。
 
@@ -186,7 +163,7 @@ export async function generateThreadSuggestion(
 只输出 JSON：
 {
   "suggestion": "建议文本"
-}`
+}`;
 
   try {
     const response = await withTimeout(
@@ -196,39 +173,34 @@ export async function generateThreadSuggestion(
         max_tokens: 200,
       }),
       30000
-    )
+    );
 
-    const rawText = response.choices?.[0]?.message?.content ?? ''
-    const parsed = parseAiJson(rawText)
-    return parsed.suggestion || ''
+    const rawText = response.choices?.[0]?.message?.content ?? '';
+    const parsed = parseAiJson(rawText);
+    return parsed.suggestion || '';
   } catch {
-    return ''
+    return '';
   }
 }
 
 // ====================== 自动创建新脉络 ======================
 
-/**
- * 检查当天未关联任何脉络的事件，尝试发现新主题
- * 每 3-5 天运行一次，不需要每天跑
- */
 export async function detectNewThreads(
   recentEvents: MemoryEvent[],
   existingThreads: ThinkingThread[],
   apiKey: string
 ): Promise<ThinkingThread[]> {
-  // 找出未关联脉络的事件
-  const orphanEvents = recentEvents.filter(e => !e.refs.threads || e.refs.threads.length === 0)
-  if (orphanEvents.length < 3) return [] // 太少不值得分析
+  const orphanEvents = recentEvents.filter(e => !e.refs.threads || e.refs.threads.length === 0);
+  if (orphanEvents.length < 3) return [];
 
-  const client = getClient()
+  const client = getClient();
 
   const eventsSummary = orphanEvents.map(e => {
-    const date = e.timestamp.slice(0, 10)
-    return `${date} ${e.title} [${e.tags.join(', ')}]`
-  }).join('\n')
+    const date = e.timestamp.slice(0, 10);
+    return `${date} ${e.title} [${e.tags.join(', ')}]`;
+  }).join('\n');
 
-  const existingThemes = existingThreads.map(t => t.theme).join(', ')
+  const existingThemes = existingThreads.map(t => t.theme).join(', ');
 
   const prompt = `以下是用户近期的零散行为（未归入任何思考脉络），以及现有的脉络主题。
 
@@ -244,7 +216,7 @@ ${eventsSummary}
   "newThreads": [
     { "theme": "主题名称", "relatedEventIds": ["事件ID1", "事件ID2"] }
   ]
-}`
+}`;
 
   try {
     const response = await withTimeout(
@@ -254,15 +226,15 @@ ${eventsSummary}
         max_tokens: 500,
       }),
       60000
-    )
+    );
 
-    const rawText = response.choices?.[0]?.message?.content ?? ''
-    const parsed = parseAiJson(rawText)
-    const newThreadsData = Array.isArray(parsed.newThreads) ? parsed.newThreads : []
+    const rawText = response.choices?.[0]?.message?.content ?? '';
+    const parsed = parseAiJson(rawText);
+    const newThreadsData = Array.isArray(parsed.newThreads) ? parsed.newThreads : [];
 
-    const createdThreads: ThinkingThread[] = []
+    const createdThreads: ThinkingThread[] = [];
     for (const nt of newThreadsData) {
-      if (!nt.theme || !Array.isArray(nt.relatedEventIds)) continue
+      if (!nt.theme || !Array.isArray(nt.relatedEventIds)) continue;
       const thread: ThinkingThread = {
         id: `thread_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
         theme: nt.theme,
@@ -272,123 +244,105 @@ ${eventsSummary}
         summary: '',
         status: 'active',
         decay: 1.0
-      }
-      createdThreads.push(thread)
+      };
+      createdThreads.push(thread);
     }
 
-    return createdThreads
+    return createdThreads;
   } catch {
-    return []
+    return [];
   }
 }
 
 // ====================== Pipeline 集成函数 ======================
 
-/**
- * 每日 pipeline 结束时调用，处理所有记忆相关任务
- */
 export async function runMemoryPipeline(date: string, apiKey: string): Promise<void> {
-  console.log('🧠 [Memory] 开始记忆系统每日处理...')
+  console.log('🧠 [Memory] 开始记忆系统每日处理...');
 
   // 1. 加载今日事件
-  const { loadEvents, applyDecay } = await import('./memory.js')
-  const todayEvents = await loadEvents(date)
-  console.log(`   今日事件数: ${todayEvents.length}`)
+  const todayEvents = await loadEvents(date);
+  console.log(`   今日事件数: ${todayEvents.length}`);
 
   // 2. 每日时间线分析
-  const timelineAnalysis = await analyzeDailyTimeline(todayEvents, date, apiKey)
-  await saveTimelineAnalysis(timelineAnalysis)
-  console.log(`   ✅ 时间线分析已生成`)
+  const timelineAnalysis = await analyzeDailyTimeline(todayEvents, date, apiKey);
+  await saveTimelineAnalysis(timelineAnalysis);
+  console.log(`   ✅ 时间线分析已生成`);
 
   // 3. 脉络衰减 + 激活
-  let threadsStore = await loadThreads()
-  threadsStore.threads = applyDecay(threadsStore.threads, date)
+  let threadsStore = await loadThreads();
+  threadsStore.threads = applyDecay(threadsStore.threads, date);
 
   // 将今日事件关联到活跃脉络
-  const { matchEventToThreads, activateThread } = await import('./memory.js')
   for (const event of todayEvents) {
-    const matched = matchEventToThreads(event, threadsStore.threads)
+    const matched = matchEventToThreads(event, threadsStore.threads);
     for (const threadId of matched) {
-      const idx = threadsStore.threads.findIndex(t => t.id === threadId)
+      const idx = threadsStore.threads.findIndex(t => t.id === threadId);
       if (idx !== -1) {
-        threadsStore.threads[idx] = activateThread(threadsStore.threads[idx], event.id, date)
+        threadsStore.threads[idx] = activateThread(threadsStore.threads[idx], event.id, date);
       }
     }
   }
 
   // 4. 更新有变化的脉络摘要
   for (let i = 0; i < threadsStore.threads.length; i++) {
-    const thread = threadsStore.threads[i]
-    if (thread.status !== 'active') continue
+    const thread = threadsStore.threads[i];
+    if (thread.status !== 'active') continue;
 
-    // 找出该脉络的所有事件（最近7天）
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const threadEvents = todayEvents.filter(e =>
       thread.eventIds.includes(e.id) &&
       new Date(e.timestamp) > sevenDaysAgo
-    )
+    );
 
-    // 事件数达到阈值才更新摘要
     if (threadEvents.length >= 3 && !thread.summary) {
-      const summary = await updateThreadSummary(thread, threadEvents, apiKey)
+      const summary = await updateThreadSummary(thread, threadEvents, apiKey);
       if (summary) {
-        threadsStore.threads[i].summary = summary
+        threadsStore.threads[i].summary = summary;
       }
     }
 
-    // 活跃超过3天的脉络生成建议
     const daysActive = Math.floor(
       (new Date().getTime() - new Date(thread.createdAt).getTime()) / (24 * 60 * 60 * 1000)
-    )
+    );
     if (daysActive >= 3 && !thread.suggestedNext) {
-      const suggestion = await generateThreadSuggestion(thread, threadEvents, apiKey)
+      const suggestion = await generateThreadSuggestion(thread, threadEvents, apiKey);
       if (suggestion) {
-        threadsStore.threads[i].suggestedNext = suggestion
+        threadsStore.threads[i].suggestedNext = suggestion;
       }
     }
   }
 
-  await saveThreads(threadsStore)
-  console.log(`   ✅ 脉络状态已更新（活跃: ${threadsStore.threads.filter(t => t.status === 'active').length}）`)
+  await saveThreads(threadsStore);
+  console.log(`   ✅ 脉络状态已更新（活跃: ${threadsStore.threads.filter(t => t.status === 'active').length}）`);
 
-  // 5. 每周一次：检测新脉络
-  const dayOfWeek = new Date().getDay()
-  if (dayOfWeek === 0) { // 周日
-    const { cleanupOldEvents } = await import('./memory.js')
-    await cleanupOldEvents()
-    console.log('   ✅ 周末清理完成')
+  // 5. 周末清理
+  const dayOfWeek = new Date().getDay();
+  if (dayOfWeek === 0) {
+    await cleanupOldEvents();
+    console.log('   ✅ 周末清理完成');
   }
 
-  console.log('🧠 [Memory] 记忆系统处理完毕')
+  console.log('🧠 [Memory] 记忆系统处理完毕');
 }
 
 // ====================== API 端点辅助函数 ======================
 
-/**
- * 供 Worker API 调用：记录一条事件
- */
 export async function recordEvent(date: string, event: MemoryEvent): Promise<{ success: boolean }> {
   try {
-    await import('./memory.js').then(m => m.appendEvent(date, event))
-    return { success: true }
+    await appendEvent(date, event);
+    return { success: true };
   } catch (e: any) {
-    console.error(`[Memory] 记录事件失败: ${e.message}`)
-    return { success: false }
+    console.error(`[Memory] 记录事件失败: ${e.message}`);
+    return { success: false };
   }
 }
 
-/**
- * 供 Worker API 调用：获取某日时间线
- */
 export async function getTimeline(date: string): Promise<DailyTimelineAnalysis | null> {
-  return loadTimelineAnalysis(date)
+  return loadTimelineAnalysis(date);
 }
 
-/**
- * 供 Worker API 调用：获取活跃脉络
- */
 export async function getActiveThreads(): Promise<ThinkingThread[]> {
-  const store = await loadThreads()
-  return store.threads.filter(t => t.status === 'active' || t.status === 'decaying')
+  const store = await loadThreads();
+  return store.threads.filter(t => t.status === 'active' || t.status === 'decaying');
 }

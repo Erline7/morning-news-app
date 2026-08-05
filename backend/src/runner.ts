@@ -6,7 +6,6 @@ import {
   fetchYahooFinanceDetailed,
   fetchGithubTrendingHeadlines,
   fetchHackerNewsHeadlines,
-  fetchGenericUrl,
   fetchArticleContent
 } from './scrapers.js'
 import { analyzeArticle, generateDailyBriefing, generatePodcastScript, AnalysisContext } from './ai.js'
@@ -24,7 +23,9 @@ import {
   updateAndCleanHistoryInR2
 } from './storage.js'
 import { generateDailyReport } from './report.js'
+import { kvGet, kvPut } from './utils.js'
 import pLimit from 'p-limit'
+import { ArticleIntelligence } from './types.js'
 
 // ====================== 配置中心 ======================
 const CONFIG = {
@@ -48,32 +49,26 @@ for (const key of REQUIRED_ENV) {
 }
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY!
 
-// ====================== KV 读写封装 ======================
-const KV_BASE = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${process.env.CLOUDFLARE_KV_NAMESPACE_ID}`
-
-async function kvGet(key: string, type: string = 'text'): Promise<any> {
-  try {
-    const res = await fetch(`${KV_BASE}/values/${key}`, {
-      headers: { 'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` }
-    })
-    if (!res.ok) return null
-    if (type === 'json') return await res.json()
-    return await res.text()
-  } catch {
-    return null
-  }
-}
-
-async function kvPut(key: string, value: string): Promise<void> {
-  const res = await fetch(`${KV_BASE}/values/${key}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/octet-stream'
-    },
-    body: value
-  })
-  if (!res.ok) throw new Error(`KV 写入失败: ${res.status}`)
+// ====================== 失败占位工厂 ======================
+function createFallbackIntelligence(headline: any, errorMessage: string): ArticleIntelligence {
+  return {
+    title: headline.title || '未知标题',
+    url: headline.url || '',
+    source: headline.source || 'Unknown',
+    collectedAt: headline.collectedAt || new Date().toISOString(),
+    summary: `${headline.title || '本文'}（原始内容抓取失败：${errorMessage}。建议直接访问原文链接查看。）`,
+    category: '未分类',
+    importance: 0,
+    keywords: [],
+    entities: [],
+    timeline: [],
+    relatedTopics: [],
+    questions: [],
+    personalThinkingPrompt: '',
+    isStarred: false,
+    unstarredAt: undefined,
+    isUserAdded: headline.isUserAdded || false,
+  };
 }
 
 // ====================== 单篇文章处理函数 ======================
@@ -89,24 +84,7 @@ async function processArticle(
     return result
   } catch (error: any) {
     console.warn(`⚠️ [失败占位] ${headline.title?.slice(0, 30)}... | ${error.message}`)
-    return {
-      title: headline.title || '未知标题',
-      url: headline.url || '',
-      source: headline.source || 'Unknown',
-      collectedAt: headline.collectedAt || new Date().toISOString(),
-      summary: `${headline.title || '本文'}（原始内容抓取失败：${error.message}。建议直接访问原文链接查看。）`,
-      category: '未分类',
-      importance: 0,
-      keywords: [],
-      entities: [],
-      timeline: [],
-      relatedTopics: [],
-      questions: [],
-      personalThinkingPrompt: '',
-      isStarred: false,
-      unstarredAt: undefined,
-      isUserAdded: headline.isUserAdded || false,
-    }
+    return createFallbackIntelligence(headline, error.message)
   }
 }
 
@@ -250,23 +228,14 @@ async function run() {
       githubLimit(async () => {
         try {
           const result = await processArticle(item, DASHSCOPE_API_KEY, analysisCtx)
-          result.isGithubTrending = true  // 标记为 GitHub Trending
+          result.isGithubTrending = true
           return result
         } catch (e: any) {
           return {
-            title: item.title,
-            url: item.url,
-            source: item.source,
-            collectedAt: item.collectedAt,
-            summary: `${item.title || '本项目'}（GitHub 项目分析失败：${e.message}）`,
+            ...createFallbackIntelligence(item, e.message),
             category: '开源项目',
             importance: 5,
             keywords: ['github', 'trending'],
-            entities: [],
-            timeline: [],
-            relatedTopics: [],
-            questions: [],
-            personalThinkingPrompt: '',
             isGithubTrending: true
           }
         }
@@ -296,14 +265,14 @@ async function run() {
     fs.writeFileSync(path.join(cacheDir, 'podcast_script.md'), script, 'utf-8')
 
     // 保存简报到 KV（供前端读取）
-    await kvPut(`report:${today}`, JSON.stringify({
+    await kvPut(`brief:${today}`, JSON.stringify({
       date: today,
       briefing,
       script,
       audioUrl: '',
       generatedAt: new Date().toISOString(),
     }))
-    console.log(`   ✅ 简报已保存到 KV: report:${today}`)
+    console.log(`   ✅ 简报已保存到 KV: brief:${today}`)
 
     // TTS 合成（MiniMax TTS，无需代理）
     try {

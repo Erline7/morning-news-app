@@ -1,80 +1,21 @@
 import OpenAI from 'openai';
 import { ArticleContent, ArticleIntelligence, RawHeadline } from './types.js';
 import { cleanArticle } from './textCleaner.js';
+import { parseAiJson, withTimeout } from './utils.js';
 
 /**
- * 创建 OpenAI 兼容客户端（单例复用）
+ * 创建 OpenAI 兼容客户端（按 apiKey 缓存）
  */
-let _client: OpenAI | null = null;
+const _clients = new Map<string, OpenAI>();
 function getClient(apiKey: string): OpenAI {
-  if (!_client) {
-    _client = new OpenAI({
+  if (!_clients.has(apiKey)) {
+    _clients.set(apiKey, new OpenAI({
       apiKey,
       baseURL: "https://api.longcat.chat/openai/v1",
       maxRetries: 0,
-    });
+    }));
   }
-  return _client;
-}
-
-/**
- * 超时包装器
- */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: any;
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-}
-
-/**
- * JSON 解析容错
- */
-export function parseAiJson(rawText: string): any {
-  if (!rawText) return {}
-
-  // 1. 剥除 Markdown 代码块
-  let text = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
-
-  // 2. 尝试直接解析
-  try { return JSON.parse(text) } catch {}
-
-  // 3. 尝试提取最外层 { ... }（用括号匹配，不用贪婪正则）
-  const firstBrace = text.indexOf('{')
-  if (firstBrace === -1) {
-    console.warn('⚠️ 无法解析 AI 返回的 JSON，未找到 {')
-    return {}
-  }
-
-  // 从 firstBrace 开始，找到匹配的闭合 }
-  let depth = 0
-  let endPos = -1
-  for (let i = firstBrace; i < text.length; i++) {
-    if (text[i] === '{') depth++
-    if (text[i] === '}') depth--
-    if (depth === 0) {
-      endPos = i
-      break
-    }
-  }
-
-  if (endPos === -1) {
-    console.warn('⚠️ 无法解析 AI 返回的 JSON，未找到匹配的 }')
-    console.warn('原始内容（前 500 字）：')
-    console.warn(text.slice(0, 500))
-    return {}
-  }
-
-  const candidate = text.slice(firstBrace, endPos + 1).replace(/,\s*([}\]])/g, '$1')
-
-  try {
-    return JSON.parse(candidate)
-  } catch (e: any) {
-    console.warn('⚠️ 无法解析 AI 返回的 JSON，原始内容（前 300 字）：')
-    console.warn(candidate.slice(0, 300))
-    return {}
-  }
+  return _clients.get(apiKey)!;
 }
 
 /**
@@ -108,7 +49,7 @@ export async function analyzeArticle(
   console.log(`[AI] 正在分析: ${content.title?.slice(0, 30)}... | 清洗后 ${safeContent.length} 字`);
 
   // 太长文章截断（LongCat 有输入限制）
-  const MAX_CONTENT_LENGTH = 8000
+  const MAX_CONTENT_LENGTH = 8000;
   const truncatedContent = safeContent.length > MAX_CONTENT_LENGTH
     ? safeContent.slice(0, MAX_CONTENT_LENGTH) + '\n\n（以下内容已截断）'
     : safeContent;
@@ -185,7 +126,6 @@ ${relatedGuide}
       relatedTopics: Array.isArray(parsed.relatedTopics) ? parsed.relatedTopics : [],
       questions: Array.isArray(parsed.questions) ? parsed.questions.slice(0, 3) : [],
       personalThinkingPrompt: parsed.personalThinkingPrompt ?? '',
-      // 保留原始内容（截断到 5000 字），用于前端详情页展示
       content: content.content ? content.content.slice(0, 5000) : '',
       isEmail: content.isEmail || false,
     };
@@ -233,6 +173,7 @@ ${topArticles.map(a => `- 标题：${a.title} [分类：${a.category}]
   概要：${a.summary}
   涉及实体：${a.entities.join(', ')}
 `).join('\n')}`;
+
   console.log(`[AI] 正在撰写市场日刊简报（${topArticles.length} 篇，按重要性排序）...`);
   const response = await withTimeout(
     client.chat.completions.create({
@@ -279,7 +220,7 @@ export async function generatePodcastScript(
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 8000,
     }),
-    180000  // 180 秒超时
+    180000
   );
   return response.choices?.[0]?.message?.content?.trim() ?? '';
 }
@@ -329,12 +270,4 @@ ${notes.length > 0 ? notes.map((n, i) => `${i + 1}. 标题：${n.title || '无�
 
   const rawText = response.choices?.[0]?.message?.content ?? '';
   return parseAiJson(rawText);
-}
-
-// 占位函数
-export async function rankHeadlines(headlines: RawHeadline[]) {
-  return headlines;
-}
-export async function clusterEvents(articles: ArticleIntelligence[]) {
-  return [];
 }
