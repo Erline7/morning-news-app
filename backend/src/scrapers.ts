@@ -312,104 +312,92 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
 /**
  * 抓取 Aivalley 最新一期 Newsletter 里的所有子文章
  *
- * 页面结构:
- * - 顶部: 多篇文章预览（每个有独立链接 /p/xxx）
- * - 底部: 当前选中的文章全文
- *
- * 策略: 抓取 archive 获取最新一期 Newsletter URL，
- *        然后解析该页面所有 /p/ 链接作为独立文章
+ * 策略: 直接抓取（不用 Jina Reader，因为超时）
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
   const BASE_URL = 'https://www.theaivalley.com';
 
   try {
-    // Step 1: 获取最新一期 Newsletter 的 URL
-    const archiveUrl = `https://r.jina.ai/${BASE_URL}/archive`;
-    const archiveRes = await requestWithRetry(archiveUrl, {
-      timeout: 45000,
-      headers: { 'Accept': 'text/plain' }
-    }, 2, 3000);
+    // Step 1: 直接抓取 archive 页面
+    console.log('   [Aivalley] 开始抓取 archive...');
+    const archiveRes = await requestWithRetry(`${BASE_URL}/archive`, {
+      timeout: 20000
+    }, 2, 2000);
 
     if (!archiveRes.data) {
       console.log('   ⚠️ [Aivalley] archive 无返回');
       return [];
     }
 
-    // 调试：打印前 2000 字符
-    console.log('   [Aivalley] Archive 返回内容（前 2000 字符）:');
-    console.log(archiveRes.data.slice(0, 2000));
+    let $ = load(archiveRes.data);
 
-    // 找第一个 /p/ 链接（最新一期 Newsletter）
-    const firstLinkMatch = /\[([^\]]{10,})\]\((\/p\/[^\)]+)\)/.exec(archiveRes.data);
-    if (!firstLinkMatch) {
-      console.log('   ⚠️ [Aivalley] 未找到最新一期链接');
+    // Step 2: 找第一个 /p/ 链接（最新一期 Newsletter）
+    let latestNewsletterUrl: string | null = null;
+
+    $('a[href*="/p/"]').each((_, el) => {
+      if (latestNewsletterUrl) return;
+      const href = $(el).attr('href');
+      if (!href) return;
+
+      // 过滤掉分页链接等
+      if (!href.match(/^\/p\/[a-z0-9-]+$/)) return;
+
+      latestNewsletterUrl = href.startsWith('http') ? href : `${BASE_URL}${href}`;
+      return false; // 只取第一个
+    });
+
+    if (!latestNewsletterUrl) {
+      console.log('   ⚠️ [Aivalley] 未找到最新一期 Newsletter 链接');
       return [];
     }
 
-    const latestNewsletterUrl = `${BASE_URL}${firstLinkMatch[2]}`;
     console.log(`   [Aivalley] 最新一期: ${latestNewsletterUrl}`);
 
-    // Step 2: 获取最新一期 Newsletter 的完整内容
-    const newsletterRes = await requestWithRetry(
-      `https://r.jina.ai/${latestNewsletterUrl}`,
-      { timeout: 45000, headers: { 'Accept': 'text/plain' } },
-      2, 3000
-    );
+    // Step 3: 抓取最新一期 Newsletter 页面
+    const newsletterRes = await requestWithRetry(latestNewsletterUrl, {
+      timeout: 20000
+    }, 2, 2000);
 
     if (!newsletterRes.data) {
-      console.log('   ⚠️ [Aivalley] Newsletter 内容无返回');
+      console.log('   ⚠️ [Aivalley] Newsletter 页面无返回');
       return [];
     }
 
-    const newsletterText = newsletterRes.data;
+    $ = load(newsletterRes.data);
 
-    // Step 3: 提取该期所有子文章（每个 /p/ 链接）
-    // Newsletter 里的子文章格式:
-    // ## 标题
-    // [阅读原文](URL)
-    // 或者
-    // ### [标题](URL)
-    // 摘要文字
+    // Step 4: 提取所有子文章
+    // Beehiiv 文章结构: <a href="/p/xxx"> 包含标题和摘要
+    const seenUrls = new Set<string>();
 
-    // 方法1: 匹配 ### [标题](/p/xxx) 格式
-    const headingLinkRegex = /#{2,3}\s+\[([^\]]+)\]\((\/p\/[^\)]+)\)/g;
-    let match;
+    $('a[href*="/p/"]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (!href || !href.match(/^\/p\/[a-z0-9-]+$/)) return;
 
-    while ((match = headingLinkRegex.exec(newsletterText)) !== null) {
-      const title = match[1].replace(/\*\*/g, '').trim();
-      const path = match[2];
-      const url = `${BASE_URL}${path}`;
+      const url = `${BASE_URL}${href}`;
+      if (seenUrls.has(url)) return;
 
-      if (title.length < 5) continue;
-      if (headlines.find(h => h.url === url)) continue; // 去重
+      // 提取标题：找 h2/h3 或者链接内文字最长的部分
+      let title = '';
+      const h2 = $(el).find('h2, h3').first();
+      if (h2.length) {
+        title = h2.text().trim();
+      } else {
+        title = $(el).text().replace(/\s+/g, ' ').trim();
+      }
 
+      // 过滤
+      if (title.length < 10) return;
+      if (title.includes('View archive') || title.includes('Unsubscribe')) return;
+
+      seenUrls.add(url);
       headlines.push({
         title,
         url,
         source: 'Aivalley',
         collectedAt: new Date().toISOString(),
       });
-    }
-
-    // 方法2: 如果方法1没找到，匹配所有 /p/ 链接
-    if (headlines.length === 0) {
-      const allLinksRegex = /\[([^\]]{10,})\]\((\/p\/[^\)]+)\)/g;
-      while ((match = allLinksRegex.exec(newsletterText)) !== null) {
-        const title = match[1].replace(/\*\*/g, '').trim();
-        const url = `${BASE_URL}${match[2]}`;
-
-        if (title.length < 5) continue;
-        if (headlines.find(h => h.url === url)) continue;
-
-        headlines.push({
-          title,
-          url,
-          source: 'Aivalley',
-          collectedAt: new Date().toISOString(),
-        });
-      }
-    }
+    });
 
     console.log(`   [Aivalley] 找到 ${headlines.length} 篇子文章`);
     headlines.forEach((h, i) => {
@@ -420,7 +408,7 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
     console.log(`   ⚠️ [Aivalley] 抓取失败: ${error.message}`);
   }
 
-  return headlines; // 返回所有子文章
+  return headlines;
 }
 
 // ==================== Hacker News ====================
