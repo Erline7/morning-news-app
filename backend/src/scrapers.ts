@@ -307,48 +307,61 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
   return headlines;
 }
 
-// ==================== Aivalley (Beehiiv) ====================
+// ==================== Aivalley (theaivalley.com) ====================
 
 /**
- * 抓取 Aivalley 最新文章列表
- * Beehiiv 平台通用模式
+ * 抓取 Aivalley 最新一篇文章
+ * 通过 Jina Reader 绕过 Cloudflare 保护
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
   const BASE_URL = 'https://www.theaivalley.com';
 
   try {
-    // Beehiiv 的归档页面通常在 /archive
-    const response = await requestWithRetry(`${BASE_URL}/archive`, { timeout: 25000 });
-    const $ = load(response.data);
+    // 用 Jina Reader 获取 archive 页面内容
+    const jinaUrl = `https://r.jina.ai/${BASE_URL}/archive`;
+    const response = await requestWithRetry(jinaUrl, {
+      timeout: 30000,
+      headers: { 'Accept': 'text/plain' }
+    }, 2, 2000);
 
-    // Beehiiv 的文章链接格式: /p/article-slug
-    $('a[href*="/p/"]').each((_, el) => {
-      const href = $(el).attr('href') || '';
-      const title = $(el).text().trim();
+    if (!response.data) {
+      console.log('   ⚠️ [Aivalley] Jina Reader 无返回');
+      return [];
+    }
 
-      // 过滤掉非文章链接（标题太短的可能是导航）
-      if (title.length < 10) return;
+    const text = response.data;
 
-      const url = href.startsWith('http') ? href : `${BASE_URL}${href}`;
+    // Jina Reader 返回 Markdown 格式，文章链接格式: [标题](URL)
+    // 找第一个 /p/ 链接（最新文章）
+    const linkRegex = /\[([^\]]+)\]\((https:\/\/www\.theaivalley\.com\/p\/[^\)]+)\)/g;
+    let match;
+    let count = 0;
 
-      // 去重
-      if (!headlines.find(h => h.url === url)) {
-        headlines.push({
-          title,
-          url,
-          source: 'Aivalley',
-          collectedAt: new Date().toISOString(),
-        });
-      }
-    });
+    while ((match = linkRegex.exec(text)) !== null) {
+      const title = match[1].trim();
+      const url = match[2].trim();
+
+      // 过滤掉过短的（可能是导航链接）
+      if (title.length < 10) continue;
+
+      headlines.push({
+        title,
+        url,
+        source: 'Aivalley',
+        collectedAt: new Date().toISOString(),
+      });
+
+      count++;
+      if (count >= 1) break; // 只取最新一篇
+    }
 
     console.log(`   [Aivalley] 抓取到 ${headlines.length} 篇文章`);
   } catch (error: any) {
     console.log(`   ⚠️ [Aivalley] 抓取失败: ${error.message}`);
   }
 
-  return headlines.slice(0, 10); // 最多取 10 篇
+  return headlines;
 }
 
 // ==================== Hacker News ====================

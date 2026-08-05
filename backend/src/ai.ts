@@ -88,7 +88,7 @@ ${relatedGuide}
   "questions": ["问题1", "问题2"],
   "personalThinkingPrompt": "一句话思考提示"
 }
-若某字段无信息，返回空数组或空字符串。确保 JSON 完整闭合。`;
+若某字段无信息，返回空数组或空字符串。确保 JSON 完整闭合。**summary 中不要包含其他文章链接，只做内容总结。**`;
 
   try {
     const response = await withTimeout(
