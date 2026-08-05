@@ -310,13 +310,72 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
 // ==================== Aivalley (theaivalley.com) ====================
 
 /**
+ * 提取 Newsletter 中某个区域的内容
+ * @param html 原始 HTML
+ * @param sectionName 区域名称（如 "THROUGH THE VALLEY"）
+ * @param nextSections 下一个区域名称列表（用于确定当前区域结束位置）
+ */
+function extractSection(html: string, sectionName: string, nextSections: string[]): string {
+  // 不区分大小写找区域标题
+  const sectionRegex = new RegExp(
+    `<[^>]*>\\s*${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<\\/[^>]*>`,
+    'i'
+  );
+
+  // 先尝试找 HTML 标签包裹的标题
+  let sectionStart = -1;
+  const match = html.match(sectionRegex);
+  if (match && match.index !== undefined) {
+    sectionStart = match.index + match[0].length;
+  } else {
+    // 兜底：直接找纯文本（转义特殊字符）
+    const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const looseRegex = new RegExp(escaped, 'i');
+    const looseMatch = html.match(looseRegex);
+    if (looseMatch && looseMatch.index !== undefined) {
+      sectionStart = looseMatch.index + looseMatch[0].length;
+    }
+  }
+
+  if (sectionStart === -1) return '';
+
+  // 找下一个区域的位置作为结束
+  let sectionEnd = html.length;
+  for (const next of nextSections) {
+    const nextRegex = new RegExp(next.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const nextMatch = html.slice(sectionStart).match(nextRegex);
+    if (nextMatch && nextMatch.index !== undefined) {
+      const nextPos = sectionStart + nextMatch.index;
+      if (nextPos < sectionEnd) sectionEnd = nextPos;
+    }
+  }
+
+  const rawHtml = html.slice(sectionStart, sectionEnd);
+
+  // HTML → 纯文本（保留链接文字）
+  return rawHtml
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ') // 去掉 <style> 块
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ') // 去掉 <script> 块
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '$2: $1') // 链接 → 文字: URL
+    .replace(/<[^>]+>/g, ' ')     // 去掉所有标签
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * 抓取 Aivalley 最新一期 Newsletter
  *
  * Newsletter 结构:
  * - THROUGH THE VALLEY: 深度分析文章 (1/ 2/ 3/ 分隔)
- * - TRENDING TOOLS: 热门工具链接列表
- * - WHAT I'M CONSUMING: 链接 + AI 总结
- * - THE VALLEY GEMS: 链接 + AI 总结
+ * - TRENDING TOOLS: 热门工具列表
+ * - WHAT I'M CONSUMING: 推荐链接
+ * - THE VALLEY GEMS: 社交精选链接
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
@@ -355,32 +414,46 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
 
     if (!newsletterRes.data) return [];
 
-    $ = load(newsletterRes.data);
-    $('script, style, noscript, iframe, nav, footer, header').remove();
+    const fullHtml = newsletterRes.data;
 
-    const mainContent = $('article, main, .body, .content, #content, .newsletter-body').first();
-    const textContent = mainContent.length ? mainContent.text() : $('body').text();
-    const cleanText = textContent.replace(/\s+/g, ' ').trim();
+    // Step 3: 按区域切分（THE VALLEY GEMS 是 JS 渲染的 Twitter 嵌入，无法抓取，跳过）
+    const throughTheValley = extractSection(fullHtml, 'THROUGH THE VALLEY', ['TRENDING TOOLS', "WHAT I'M CONSUMING", 'THE VALLEY GEMS']);
+    const trendingTools = extractSection(fullHtml, 'TRENDING TOOLS', ["WHAT I'M CONSUMING", 'THE VALLEY GEMS']);
+    const whatImConsuming = extractSection(fullHtml, "WHAT I'M CONSUMING", ['THE VALLEY GEMS']);
 
-    // 提取所有外部链接
-    const links: string[] = [];
-    $('a[href^="http"]').each((_, el) => {
-      const href = $(el).attr('href');
-      const linkText = $(el).text().trim();
-      if (href && linkText && !href.includes('theaivalley.com')) {
-        links.push(`${linkText}: ${href}`);
-      }
-    });
+    console.log(`   [Aivalley] 区域切分: THROUGH=${throughTheValley.length}字, TOOLS=${trendingTools.length}字, CONSUMING=${whatImConsuming.length}字`);
 
-    console.log(`   [Aivalley] 提取到 ${cleanText.length} 字文本, ${links.length} 个外部链接`);
+    // Step 4: 拼接成结构化文本给 AI
+    const sections: string[] = [];
 
-    // Step 3: 返回给 AI 分析
+    if (throughTheValley) {
+      sections.push(`## THROUGH THE VALLEY（深度分析）\n\n${throughTheValley}`);
+    }
+    if (trendingTools) {
+      sections.push(`## TRENDING TOOLS（热门工具）\n\n${trendingTools}`);
+    }
+    if (whatImConsuming) {
+      sections.push(`## WHAT I'M CONSUMING（我在消费）\n\n${whatImConsuming}`);
+    }
+
+    if (sections.length === 0) {
+      console.log('   ⚠️ [Aivalley] 未能切分出任何区域，降级为全文');
+      // 降级：直接抓全文
+      $ = load(fullHtml);
+      $('script, style, noscript, iframe, nav, footer, header').remove();
+      const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+      sections.push(bodyText.slice(0, 8000));
+    }
+
+    const structuredContent = sections.join('\n\n---\n\n');
+
+    // Step 5: 返回给 AI 分析
     headlines.push({
       title: 'Aivalley Newsletter',
       url: latestNewsletterUrl,
       source: 'Aivalley',
       collectedAt: new Date().toISOString(),
-      preFetchedContent: cleanText.slice(0, 10000) + '\n\n--- 页面中的外部链接 ---\n' + links.join('\n'),
+      preFetchedContent: structuredContent.slice(0, 12000),
     });
 
   } catch (error: any) {
