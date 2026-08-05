@@ -312,6 +312,13 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
 /**
  * 抓取 Aivalley 最新一篇文章
  * 通过 Jina Reader 绕过 Cloudflare 保护
+ *
+ * 页面结构:
+ * <a href="/p/article-slug">
+ *   <h2>文章标题</h2>
+ *   <p>文章摘要</p>
+ *   <div>作者 · 日期</div>
+ * </a>
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
@@ -321,9 +328,9 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
     // 用 Jina Reader 获取 archive 页面内容
     const jinaUrl = `https://r.jina.ai/${BASE_URL}/archive`;
     const response = await requestWithRetry(jinaUrl, {
-      timeout: 30000,
+      timeout: 45000,
       headers: { 'Accept': 'text/plain' }
-    }, 2, 2000);
+    }, 2, 3000);
 
     if (!response.data) {
       console.log('   ⚠️ [Aivalley] Jina Reader 无返回');
@@ -332,18 +339,25 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
 
     const text = response.data;
 
-    // Jina Reader 返回 Markdown 格式，文章链接格式: [标题](URL)
-    // 找第一个 /p/ 链接（最新文章）
-    const linkRegex = /\[([^\]]+)\]\((https:\/\/www\.theaivalley\.com\/p\/[^\)]+)\)/g;
+    // Jina Reader 返回 Markdown 格式
+    // 文章链接格式: [标题](URL) 或者 ![image](url)\n\n**[标题](URL)**
+    // Beehiiv 格式通常是: **[![](image-url)](/p/slug)** 或者 [标题](/p/slug)
+
+    // 方法1: 找 /p/ 开头的链接
+    const linkRegex = /\[([^\]]{10,})\]\((\/p\/[^\)]+)\)/g;
     let match;
-    let count = 0;
 
     while ((match = linkRegex.exec(text)) !== null) {
-      const title = match[1].trim();
-      const url = match[2].trim();
+      const title = match[1]
+        .replace(/\*\*/g, '')  // 去掉 Markdown 粗体
+        .replace(/!\[.*?\]\(.*?\)\s*/g, '')  // 去掉图片标记
+        .trim();
+      const path = match[2];
+      const url = `${BASE_URL}${path}`;
 
-      // 过滤掉过短的（可能是导航链接）
+      // 过滤无效标题
       if (title.length < 10) continue;
+      if (title.includes('View archive') || title.includes('Unsubscribe')) continue;
 
       headlines.push({
         title,
@@ -352,11 +366,34 @@ export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
         collectedAt: new Date().toISOString(),
       });
 
-      count++;
-      if (count >= 1) break; // 只取最新一篇
+      // 只取最新一篇
+      break;
     }
 
-    console.log(`   [Aivalley] 抓取到 ${headlines.length} 篇文章`);
+    // 方法2: 如果方法1没找到，尝试其他格式
+    if (headlines.length === 0) {
+      // 匹配 ** [标题](URL) 这种格式
+      const altRegex = /\*\*?\[([^\]]{10,})\]\((\/p\/[^\)]+)\)\*\*?/g;
+      while ((match = altRegex.exec(text)) !== null) {
+        const title = match[1].replace(/\*\*/g, '').trim();
+        const url = `${BASE_URL}${match[2]}`;
+
+        if (title.length < 10) continue;
+
+        headlines.push({
+          title,
+          url,
+          source: 'Aivalley',
+          collectedAt: new Date().toISOString(),
+        });
+        break;
+      }
+    }
+
+    console.log(`   [Aivalley] 抓取到 ${headlines.length} 篇`);
+    if (headlines.length > 0) {
+      console.log(`   最新文章: ${headlines[0].title?.slice(0, 50)}...`);
+    }
   } catch (error: any) {
     console.log(`   ⚠️ [Aivalley] 抓取失败: ${error.message}`);
   }
