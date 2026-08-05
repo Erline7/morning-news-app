@@ -42,7 +42,7 @@ export async function analyzeArticle(
   content: ArticleContent,
   apiKey: string,
   ctx?: AnalysisContext
-): Promise<ArticleIntelligence> {
+): Promise<ArticleIntelligence | ArticleIntelligence[]> {
   const client = getClient(apiKey);
 
   const safeContent = cleanArticle(content.content);
@@ -60,6 +60,12 @@ export async function analyzeArticle(
   const categoryGuide = `请先评估是否能归入以下既定分类：[${categoryPool.join(', ')}]。
 若完全不匹配，允许你根据核心领域自行创建一个简短的、政治中立的、字数在 2-6 字之间的专业新分类（例如 '生物医药', '新能源', '半导体'），切记不要创建意义重合的分类。**分类名必须是中文，不要用英文。**`;
 
+  // 特殊处理：Aivalley Newsletter 需要拆分成多篇文章
+  const isAivalleyNewsletter = content.source === 'Aivalley' && content.title === 'Aivalley Newsletter';
+  const newsletterGuide = isAivalleyNewsletter
+    ? `\n\n**重要：这是一份 Newsletter，包含多篇文章。请按以下格式输出 JSON 数组：**\n[\n  {"title": "子文章1标题", "summary": "...", "category": "...", "importance": 7, "keywords": [...], "entities": [...], "timeline": [...], "relatedTopics": [...], "questions": [...], "personalThinkingPrompt": "..."},\n  {"title": "子文章2标题", ...}\n]\n每个子文章独立分析，summary 保持原文中的链接。`
+    : '';
+
   const recentTitles = ctx?.recentArticleTitles ?? [];
   const relatedGuide = recentTitles.length > 0
     ? `近期文章标题参考（用于判断是否与历史文章有关联）：\n[${recentTitles.join(', ')}]\n请判断本文与以上哪些文章存在事件/主题/实体的延续或关联。`
@@ -73,9 +79,9 @@ export async function analyzeArticle(
 来源：${content.source}
 内容：${truncatedContent}
 
-${relatedGuide}
+${relatedGuide}${newsletterGuide}
 
-严格输出以下 JSON 格式（字段类型必须一致，所有字段必须输出）：
+${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'}（字段类型必须一致，所有字段必须输出）：
 {
   "title": "文章标题（如果是英文标题，必须翻译成中文；如果是中文标题，保持原样）",
   "summary": "文章核心总结（${summaryLength}，覆盖背景、关键事件、结论）",
@@ -95,7 +101,7 @@ ${relatedGuide}
       client.chat.completions.create({
         model: 'LongCat-2.0',
         messages: [{ role: 'user', content: finalPrompt }],
-        max_tokens: 5000,
+        max_tokens: isAivalleyNewsletter ? 8000 : 5000, // Newsletter 需要更多 token
       }),
       120000
     );
@@ -103,6 +109,28 @@ ${relatedGuide}
     const rawText = response.choices?.[0]?.message?.content ?? '';
     const parsed = parseAiJson(rawText);
 
+    // Newsletter 返回的是数组，需要特殊处理
+    if (isAivalleyNewsletter && Array.isArray(parsed)) {
+      console.log(`[AI] Newsletter 拆分为 ${parsed.length} 篇子文章`);
+      return parsed.map((item: any) => ({
+        title: item.title || 'Aivalley 文章',
+        url: content.url, // 都用 Newsletter 主链接
+        source: 'Aivalley',
+        collectedAt: content.collectedAt,
+        summary: item.summary ?? '',
+        category: item.category ?? 'AI/科技',
+        importance: Math.max(1, Math.min(10, Number(item.importance) || 6)),
+        keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 5) : [],
+        entities: Array.isArray(item.entities) ? item.entities.slice(0, 5) : [],
+        timeline: Array.isArray(item.timeline) ? item.timeline : [],
+        relatedTopics: Array.isArray(item.relatedTopics) ? item.relatedTopics : [],
+        questions: Array.isArray(item.questions) ? item.questions.slice(0, 3) : [],
+        personalThinkingPrompt: item.personalThinkingPrompt ?? '',
+        content: content.content,
+      }));
+    }
+
+    // 普通文章返回单个对象
     const importanceRaw = parsed.importance;
     let importance = 3;
     if (typeof importanceRaw === 'number') {

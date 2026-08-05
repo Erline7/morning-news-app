@@ -310,98 +310,76 @@ export async function fetchYahooFinanceDetailed(): Promise<RawHeadline[]> {
 // ==================== Aivalley (theaivalley.com) ====================
 
 /**
- * 抓取 Aivalley 最新一期 Newsletter 里的所有子文章
- *
- * 策略: 直接抓取（不用 Jina Reader，因为超时）
+ * 抓取 Aivalley 最新一期 Newsletter
+ * 策略: 把整个页面文本交给 AI 分析和拆解
  */
 export async function fetchAivalleyHeadlines(): Promise<RawHeadline[]> {
   const headlines: RawHeadline[] = [];
   const BASE_URL = 'https://www.theaivalley.com';
 
   try {
-    // Step 1: 直接抓取 archive 页面
+    // Step 1: 抓取 archive 找最新一期
     console.log('   [Aivalley] 开始抓取 archive...');
     const archiveRes = await requestWithRetry(`${BASE_URL}/archive`, {
       timeout: 20000
     }, 2, 2000);
 
-    if (!archiveRes.data) {
-      console.log('   ⚠️ [Aivalley] archive 无返回');
-      return [];
-    }
+    if (!archiveRes.data) return [];
 
     let $ = load(archiveRes.data);
 
-    // Step 2: 找第一个 /p/ 链接（最新一期 Newsletter）
+    // 找第一个 /p/ 链接（最新一期 Newsletter）
     let latestNewsletterUrl: string | null = null;
-
     $('a[href*="/p/"]').each((_, el) => {
       if (latestNewsletterUrl) return;
       const href = $(el).attr('href');
-      if (!href) return;
-
-      // 过滤掉分页链接等
-      if (!href.match(/^\/p\/[a-z0-9-]+$/)) return;
-
-      latestNewsletterUrl = href.startsWith('http') ? href : `${BASE_URL}${href}`;
-      return false; // 只取第一个
+      if (!href || !href.match(/^\/p\/[a-z0-9-]+$/)) return;
+      latestNewsletterUrl = `${BASE_URL}${href}`;
+      return false;
     });
 
     if (!latestNewsletterUrl) {
-      console.log('   ⚠️ [Aivalley] 未找到最新一期 Newsletter 链接');
+      console.log('   ⚠️ [Aivalley] 未找到最新一期');
       return [];
     }
-
     console.log(`   [Aivalley] 最新一期: ${latestNewsletterUrl}`);
 
-    // Step 3: 抓取最新一期 Newsletter 页面
+    // Step 2: 抓取最新一期 Newsletter 页面全文
     const newsletterRes = await requestWithRetry(latestNewsletterUrl, {
       timeout: 20000
     }, 2, 2000);
 
-    if (!newsletterRes.data) {
-      console.log('   ⚠️ [Aivalley] Newsletter 页面无返回');
-      return [];
-    }
+    if (!newsletterRes.data) return [];
 
     $ = load(newsletterRes.data);
 
-    $ = load(newsletterRes.data);
+    // Step 3: 提取页面所有文本和链接
+    $('script, style, noscript, iframe, nav, footer, header').remove();
 
-    // Step 4: Newsletter 里所有子文章都在同一个页面
-    // 结构: <h2>文章标题</h2> + 正文内容
-    // 策略: 找所有 <h2> 标题，每个标题对应一篇子文章
+    const mainContent = $('article, main, .body, .content, #content, .newsletter-body').first();
+    const textContent = mainContent.length ? mainContent.text() : $('body').text();
 
-    const h2Elements = $('h2');
-    console.log(`   [Aivalley] 找到 ${h2Elements.length} 个 h2 标题`);
+    const cleanText = textContent.replace(/\s+/g, ' ').trim();
 
-    h2Elements.each((i, el) => {
-      const title = $(el).text().trim();
-      if (title.length < 5) return;
-
-      // 提取这个 h2 到下一个 h2 之间的内容
-      let content = '';
-      let next = $(el).next();
-      while (next.length && !next.is('h2')) {
-        content += next.text().trim() + ' ';
-        next = next.next();
+    // 提取页面上所有外部链接（供 AI 参考）
+    const links: string[] = [];
+    $('a[href^="http"]').each((_, el) => {
+      const href = $(el).attr('href');
+      const linkText = $(el).text().trim();
+      if (href && linkText && !href.includes('theaivalley.com')) {
+        links.push(`${linkText}: ${href}`);
       }
-
-      // 只保留有足够内容的
-      if (content.length < 50) return;
-
-      headlines.push({
-        title,
-        url: latestNewsletterUrl + `#article-${i}`, // 用锚点标记
-        source: 'Aivalley',
-        collectedAt: new Date().toISOString(),
-        preFetchedContent: content.slice(0, 3000), // 传入预抓取的内容
-      });
     });
 
-    console.log(`   [Aivalley] 找到 ${headlines.length} 篇子文章`);
-    headlines.forEach((h, i) => {
-      console.log(`   ${i + 1}. ${h.title?.slice(0, 40)}...`);
+    console.log(`   [Aivalley] 提取到 ${cleanText.length} 字文本, ${links.length} 个外部链接`);
+
+    // Step 4: 作为一篇文章返回，正文包含文本和链接
+    headlines.push({
+      title: 'Aivalley Newsletter',
+      url: latestNewsletterUrl,
+      source: 'Aivalley',
+      collectedAt: new Date().toISOString(),
+      preFetchedContent: cleanText.slice(0, 8000) + '\n\n--- 页面中的链接 ---\n' + links.join('\n'),
     });
 
   } catch (error: any) {

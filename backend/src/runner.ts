@@ -77,10 +77,17 @@ async function processArticle(
   headline: any,
   apiKey: string,
   ctx?: AnalysisContext
-): Promise<any> {
+): Promise<any | any[]> {
   try {
     const contentData = await fetchArticleContent(headline)
     const result = await analyzeArticle(contentData, apiKey, ctx)
+    // Newsletter 可能返回数组（多篇文章）
+    if (Array.isArray(result)) {
+      return result.map((item: any) => {
+        if (headline.isUserAdded) item.isUserAdded = true;
+        return item;
+      });
+    }
     if (headline.isUserAdded) result.isUserAdded = true
     return result
   } catch (error: any) {
@@ -220,9 +227,12 @@ async function run() {
   const processTasks = allHeadlines.map(headline =>
     limit(() => processArticle(headline, DASHSCOPE_API_KEY, analysisCtx))
   )
-  const articles = await Promise.all(processTasks)
+  const results = await Promise.all(processTasks)
 
-  // 并网 GitHub 深度分析
+  // 展开数组（Aivalley Newsletter 会返回多篇文章）
+  const articles = results.flat()
+
+  console.log(`✅ AI 全局分析完成，共收纳 ${articles.length} 条多维结构化情报`)
   if (githubTrendingData.length > 0) {
     console.log(`🚀 3.5 处理 ${githubTrendingData.length} 个 GitHub Trending 项目...`)
     const githubLimit = pLimit(Math.min(CONFIG.aiConcurrency, 2))
