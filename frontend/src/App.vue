@@ -48,6 +48,7 @@
 
         <ContentLibrary v-else-if="activeTab === 'content'"
           :articles="filteredArticles"
+          :selected-article="selectedArticle"
           :search-query="contentSearchQuery"
           :active-filter="activeFilter"
           :stats="stats"
@@ -197,6 +198,7 @@ const dailyReport = ref(null);
 const isGeneratingReport = ref(false);
 const notes = ref([]);
 const selectedNote = ref(null);
+const selectedArticle = ref(null);
 const showArticlePicker = ref(false);
 const articleSearchQuery = ref('');
 const contentSearchQuery = ref('');
@@ -470,6 +472,7 @@ const pickArticle = (article) => {
 
 // Articles
 const selectArticle = (article) => {
+  selectedArticle.value = article;
   recordEvent('article_read', article.title, { articles: [article.url], tags: [article.category].filter(Boolean) });
 };
 

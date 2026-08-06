@@ -175,6 +175,9 @@ const formatBriefing = (text) => {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
+  // Markdown 链接 [text](url) -> <a>
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">$1</a>');
+
   html = html.replace(/^#### (.+)$/gm, '<h4 class="text-base font-bold text-gray-900 dark:text-white mt-4 mb-2">$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-gray-900 dark:text-white mt-6 mb-2">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-gray-900 dark:text-white mt-8 mb-3">$1</h2>');
