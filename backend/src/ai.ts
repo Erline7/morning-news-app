@@ -84,7 +84,7 @@ ${relatedGuide}${newsletterGuide}
 ${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'}（字段类型必须一致，所有字段必须输出）：
 {
   "title": "文章标题（如果是英文标题，必须翻译成中文；如果是中文标题，保持原样）",
-  "summary": "文章核心总结（${summaryLength}，覆盖背景、关键事件、结论）",
+  "summary": "文章核心总结（${summaryLength}，用简洁客观的语言直接说明论文/文章做了什么、发现了什么、有什么意义。不要使用'本文''该研究''为...提供''探讨了''分析了'等套话，直接陈述内容。）",
   "category": "文章最核心的主分类。${categoryGuide}",
   "importance": 重要性评分 1-10（只输出数字）,
   "keywords": ["关键词1", "关键词2", "关键词3"],
@@ -103,7 +103,7 @@ ${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'
         messages: [{ role: 'user', content: finalPrompt }],
         max_tokens: isAivalleyNewsletter ? 8000 : 5000, // Newsletter 需要更多 token
       }),
-      120000
+      180000
     );
 
     const rawText = response.choices?.[0]?.message?.content ?? '';

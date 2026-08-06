@@ -536,9 +536,12 @@ export async function fetchGenericUrl(url: string): Promise<{ title: string; con
   // 策略 2：Jina Reader
   try {
     const response = await requestWithRetry(`https://r.jina.ai/${url}`, {
-      timeout: 30000,
-      headers: { 'Accept': 'text/plain' }
-    }, 2, 1500);
+      timeout: 40000,
+      headers: {
+        'Accept': 'text/plain',
+        'X-Return-Format': 'text',
+      }
+    }, 2, 2000);
     if (response.data && response.data.length > 100) {
       // Jina 返回格式：第一行是 Title: xxx
       const lines = response.data.split('\n');
@@ -580,9 +583,13 @@ async function fetchDirectly(url: string): Promise<string> {
 async function fetchViaJinaWithRetry(url: string): Promise<string> {
   try {
     const response = await requestWithRetry(`https://r.jina.ai/${url}`, {
-      timeout: 35000,
-      headers: { 'Accept': 'text/plain' }
-    }, 2, 1500);
+      timeout: 40000,
+      headers: {
+        'Accept': 'text/plain',
+        'X-Return-Format': 'text',
+        'X-With-Generated-Alt': 'false',
+      }
+    }, 2, 2000);
     if (response.data && response.data.length > 50) return response.data;
   } catch (e) {}
   throw new Error('Jina 策略解密失败');

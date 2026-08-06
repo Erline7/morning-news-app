@@ -57,12 +57,21 @@ const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY!
 
 // ====================== 失败占位工厂 ======================
 function createFallbackIntelligence(headline: any, errorMessage: string): ArticleIntelligence {
+  // 根据错误类型给出更友好的提示
+  let friendlyError = errorMessage;
+  if (errorMessage.includes('Timeout') || errorMessage.includes('超时')) {
+    friendlyError = '分析耗时过长，可能是内容较复杂。建议直接访问原文阅读。';
+  } else if (errorMessage.includes('403') || errorMessage.includes('验证') || errorMessage.includes('Cloudflare') || errorMessage.includes('CF')) {
+    friendlyError = '原文受 Cloudflare 保护无法自动抓取，需手动访问。';
+  } else if (errorMessage.includes('fetch') || errorMessage.includes('抓取') || errorMessage.includes('connect')) {
+    friendlyError = '原文页面暂时无法访问，可能是网络限制或网站反爬。';
+  }
   return {
     title: headline.title || '未知标题',
     url: headline.url || '',
     source: headline.source || 'Unknown',
     collectedAt: headline.collectedAt || new Date().toISOString(),
-    summary: `${headline.title || '本文'}（原始内容抓取失败：${errorMessage}。建议直接访问原文链接查看。）`,
+    summary: `${headline.title || '本文'}（${friendlyError}）`,
     category: '未分类',
     importance: 0,
     keywords: [],
