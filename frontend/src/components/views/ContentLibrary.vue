@@ -12,16 +12,9 @@
         <div class="prose prose-lg text-gray-700 dark:text-gray-300 leading-relaxed max-w-none">
           <p>{{ selectedArticle.summary }}</p>
         </div>
-        <div v-if="selectedArticle.content" class="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
-          <div class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 flex items-center">
-            <BookOpen :size="14" class="mr-2" />{{ selectedArticle.isEmail ? '邮件原文' : '原文内容' }}
-          </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-gray-50 dark:bg-[#121212] rounded-xl p-5">{{ selectedArticle.content }}</div>
-        </div>
         <div class="mt-10 pt-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-sm">
-          <a v-if="selectedArticle.url?.startsWith('http')" :href="getArticleUrl(selectedArticle)" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">阅读原文 <ExternalLink :size="16" class="ml-1" /></a>
-          <span v-else-if="selectedArticle.url?.startsWith('email')" class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> 邮件内容</span>
-          <span v-else class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> Newsletter 子文章</span>
+          <a v-if="getArticleUrl(selectedArticle)" :href="getArticleUrl(selectedArticle)" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center font-medium">阅读原文 <ExternalLink :size="16" class="ml-1" /></a>
+          <span v-else class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> 邮件/内部内容</span>
           <span class="text-gray-400 dark:text-gray-500 flex items-center"><Clock :size="14" class="mr-1" />{{ formatDate(selectedArticle.collectedAt) }}</span>
         </div>
       </div>
@@ -160,7 +153,7 @@
 </template>
 
 <script setup>
-import { Search, X, Loader2, Plus, BookOpen, ExternalLink, Clock, Mail, Star, Trash2, Pencil } from 'lucide-vue-next';
+import { Search, X, Loader2, Plus, ExternalLink, Clock, Star, Trash2, Pencil } from 'lucide-vue-next';
 
 defineProps({
   articles: { type: Array, default: () => [] },
@@ -184,13 +177,17 @@ defineEmits([
   'open-category-editor', 'close-category-editor', 'save-category-edit', 'update:new-category'
 ]);
 
-// 获取文章原始链接（处理 Aivalley 子文章锚点）
+// 获取文章原始链接，返回 null 表示没有可点击的链接
 const getArticleUrl = (article) => {
-  if (!article.url) return '#';
+  if (!article?.url) return null;
+  if (article.url.startsWith('email://')) return null;
   if (article.url.includes('#aivalley-')) {
     return article.url.split('#')[0];
   }
-  return article.url;
+  if (article.url.startsWith('http')) {
+    return article.url;
+  }
+  return null;
 };
 
 const formatDate = (iso) => (!iso ? '—' : String(iso).slice(0, 10));
