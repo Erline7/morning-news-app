@@ -38,6 +38,7 @@
           :today-count="todayArticlesCount"
           :display-date="displayDateStr"
           :github-trending="githubTrending"
+          :aivalley-articles="aivalleyArticlesToday"
           :has-audio="hasAudio"
           :is-playing="isPlaying"
           @toggle-audio="toggleAudio"
@@ -256,7 +257,8 @@ const handleNavigate = (tab) => {
 };
 
 // --- Computed ---
-const todayStr = new Date().toISOString().split('T')[0];
+// 使用北京时间日期，确保和后端 KV 键名一致
+const todayStr = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
 
 const totalArticles = computed(() => rawArticles.value.filter(a => !a.isGithubTrending).length);
 
@@ -309,6 +311,13 @@ const briefingData = computed(() => {
 });
 
 const githubTrending = computed(() => githubTrendingData.value.slice(0, 10));
+
+// Aivalley 今日文章（用于首页 Aivalley Picks 区域）
+const aivalleyArticlesToday = computed(() =>
+  rawArticles.value.filter(a =>
+    a.source === 'Aivalley' && a.collectedAt?.startsWith(todayStr)
+  )
+);
 
 const sortedNotes = computed(() => {
   return [...notes.value].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));

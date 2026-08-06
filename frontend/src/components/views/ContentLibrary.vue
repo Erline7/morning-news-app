@@ -19,8 +19,9 @@
           <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-gray-50 dark:bg-[#121212] rounded-xl p-5">{{ selectedArticle.content }}</div>
         </div>
         <div class="mt-10 pt-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-sm">
-          <a v-if="selectedArticle.url?.startsWith('http')" :href="selectedArticle.url" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">阅读原文 <ExternalLink :size="16" class="ml-1" /></a>
-          <span v-else class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> 邮件内容</span>
+          <a v-if="selectedArticle.url?.startsWith('http')" :href="getArticleUrl(selectedArticle)" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">阅读原文 <ExternalLink :size="16" class="ml-1" /></a>
+          <span v-else-if="selectedArticle.url?.startsWith('email')" class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> 邮件内容</span>
+          <span v-else class="text-gray-400 dark:text-gray-500 text-sm flex items-center"><Mail :size="14" class="mr-1.5" /> Newsletter 子文章</span>
           <span class="text-gray-400 dark:text-gray-500 flex items-center"><Clock :size="14" class="mr-1" />{{ formatDate(selectedArticle.collectedAt) }}</span>
         </div>
       </div>
@@ -182,6 +183,15 @@ defineEmits([
   'add-url', 'save-link-all', 'save-link-only', 'toggle-star', 'delete-article',
   'open-category-editor', 'close-category-editor', 'save-category-edit', 'update:new-category'
 ]);
+
+// 获取文章原始链接（处理 Aivalley 子文章锚点）
+const getArticleUrl = (article) => {
+  if (!article.url) return '#';
+  if (article.url.includes('#aivalley-')) {
+    return article.url.split('#')[0];
+  }
+  return article.url;
+};
 
 const formatDate = (iso) => (!iso ? '—' : String(iso).slice(0, 10));
 </script>

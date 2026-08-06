@@ -64,6 +64,24 @@
       </div>
     </div>
 
+    <!-- Aivalley Trending Tools -->
+    <div v-if="aivalleyPicks.tools.length > 0" class="mb-20">
+      <div class="flex items-center text-xs font-semibold tracking-widest text-gray-400 dark:text-gray-500 uppercase mb-5">
+        <Lightbulb :size="14" class="mr-2" />AIVALLEY TRENDING TOOLS · 热门工具
+      </div>
+      <div class="bg-white dark:bg-[#1A1A1A] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-5">
+          <a v-for="(item, idx) in aivalleyPicks.tools" :key="idx" :href="extractLinkFromSummary(item.summary) || getAivalleyLink(item)" target="_blank" class="p-3 rounded-xl bg-gray-50 dark:bg-[#111] hover:bg-gray-100 dark:hover:bg-[#222] transition-colors group">
+            <div class="flex items-center mb-1">
+              <h3 class="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate text-sm">{{ item.title }}</h3>
+              <ExternalLink :size="12" class="ml-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            </div>
+            <p class="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed line-clamp-2">{{ item.summary }}</p>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <!-- GitHub Trending -->
     <div v-if="githubTrending.length > 0" class="mb-20">
       <div class="flex items-center text-xs font-semibold tracking-widest text-gray-400 dark:text-gray-500 uppercase mb-5">
@@ -98,20 +116,48 @@
 </template>
 
 <script setup>
-import { Activity, BookOpen, TrendingUp, ExternalLink, Star, Play, Volume2 } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Activity, BookOpen, TrendingUp, ExternalLink, Star, Play, Volume2, Lightbulb } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
   briefing: { type: String, default: '' },
   briefingData: { type: Array, default: () => [] },
   stats: { type: Array, default: () => [] },
   todayCount: { type: Number, default: 0 },
   displayDate: { type: String, default: '' },
   githubTrending: { type: Array, default: () => [] },
+  aivalleyArticles: { type: Array, default: () => [] },
   hasAudio: { type: Boolean, default: false },
   isPlaying: { type: Boolean, default: false },
 });
 
 defineEmits(['toggle-audio', 'navigate', 'filter']);
+
+// Aivalley 热门工具
+const aivalleyPicks = computed(() => {
+  const articles = props.aivalleyArticles || [];
+  const isTool = (a) => a.category === 'AI工具' || a.title?.startsWith('🔧') || a.title?.includes('🔧');
+  return {
+    tools: articles.filter(a => isTool(a)),
+  };
+});
+
+// 从 Aivalley 子文章 URL 中提取真实外部链接（处理 #aivalley-N 锚点）
+const getAivalleyLink = (article) => {
+  if (!article.url) return '#';
+  if (article.url.includes('#aivalley-')) {
+    // 子文章：Newsletter 主页面链接（去掉锚点）
+    return article.url.split('#')[0];
+  }
+  return article.url;
+};
+
+// 从 summary 中提取 "text: URL" 格式的链接（Aivalley 工具/推荐中有）
+const extractLinkFromSummary = (summary) => {
+  if (!summary) return null;
+  const match = summary.match(/https?:\/\/[^\s，。,]+/);
+  return match ? match[0] : null;
+};
 
 const getCategoryEmoji = (category) => {
   if (category.includes('人工智能') || category.includes('AI')) return '🤖';

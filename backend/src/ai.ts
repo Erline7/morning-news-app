@@ -112,9 +112,9 @@ ${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'
     // Newsletter 返回的是数组，需要特殊处理
     if (isAivalleyNewsletter && Array.isArray(parsed)) {
       console.log(`[AI] Newsletter 拆分为 ${parsed.length} 篇子文章`);
-      return parsed.map((item: any) => ({
+      return parsed.map((item: any, idx: number) => ({
         title: item.title || 'Aivalley 文章',
-        url: content.url, // 都用 Newsletter 主链接
+        url: `${content.url}#aivalley-${idx + 1}`, // 用锚点区分子文章，确保唯一
         source: 'Aivalley',
         collectedAt: content.collectedAt,
         summary: item.summary ?? '',
@@ -126,7 +126,7 @@ ${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'
         relatedTopics: Array.isArray(item.relatedTopics) ? item.relatedTopics : [],
         questions: Array.isArray(item.questions) ? item.questions.slice(0, 3) : [],
         personalThinkingPrompt: item.personalThinkingPrompt ?? '',
-        content: content.content,
+        content: `${item.summary}\n\n---\n原文链接：${content.url}`, // 详情页显示摘要 + Newsletter 链接
       }));
     }
 

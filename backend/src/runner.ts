@@ -33,6 +33,11 @@ const CONFIG = {
   aiConcurrency: 2,
 }
 
+// 使用北京时间日期（UTC+8），确保 UTC 23:00 = 北京 07:00 时日期正确
+function getBeijingDate(): string {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 // ====================== 运行模式 ======================
 // PIPELINE_MODE=morning（默认）：完整流程（抓取→简报→复盘→记忆）
 // PIPELINE_MODE=evening：只跑复盘 + 记忆系统
@@ -260,9 +265,7 @@ async function run() {
 
   console.log(`✅ AI 全局分析完成，共收纳 ${articles.length} 条多维结构化情报`)
 
-  // ==================== 4. 简报组织与音频合成 ====================
-  console.log('🚀 4. 生成简报、播客和音频...')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getBeijingDate();
 
   let briefing = ''
   let script = ''
