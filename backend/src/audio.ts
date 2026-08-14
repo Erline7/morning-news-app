@@ -22,7 +22,7 @@ async function generateSpeech(text: string): Promise<Buffer> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'speech-02-hd',
+      model: 'speech-02-turbo',
       text: text.substring(0, 5000),
       voice_setting: {
         voice_id: 'female-shaonv',
