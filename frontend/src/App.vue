@@ -140,6 +140,9 @@
           :active-threads="activeThreads"
           @refresh="loadTimeline"
         />
+
+        <DiscussionsView v-else-if="activeTab === 'discussions'" />
+
       </div>
     </div>
   </div>
@@ -159,6 +162,7 @@ import NotesView from './components/views/NotesView.vue';
 import SubscriptionsView from './components/views/SubscriptionsView.vue';
 import ReportView from './components/views/ReportView.vue';
 import TimelineView from './components/views/TimelineView.vue';
+import DiscussionsView from './components/views/DiscussionsView.vue';
 
 // --- State ---
 const activeTab = ref('brief');

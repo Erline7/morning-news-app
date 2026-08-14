@@ -17,6 +17,15 @@
         今日简报
       </button>
 
+      <button
+        @click="$emit('navigate', 'discussions')"
+        class="w-full flex items-center px-3 py-2.5 rounded-lg mb-2 transition-colors text-left"
+        :class="activeTab === 'discussions' ? activeClass : inactiveClass"
+      >
+        <Flame :size="18" class="mr-3 text-gray-500 dark:text-gray-400" />
+        人们正在讨论
+      </button>
+
       <!-- Categories dropdown -->
       <div class="mb-2">
         <button
@@ -124,7 +133,7 @@
 <script setup>
 import { ref } from 'vue';
 import {
-  Layers, Home, BookOpen, ChevronDown, MessageSquare,
+  Layers, Home, Flame, BookOpen, ChevronDown, MessageSquare,
   StickyNote, Rss, ClipboardList, Clock
 } from 'lucide-vue-next';
 

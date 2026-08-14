@@ -12,6 +12,7 @@ import {
 import { analyzeArticle, generateDailyBriefing, generatePodcastScript, AnalysisContext } from './ai.js'
 import { runMemoryPipeline } from './memoryAI.js'
 import { synthesizeAudio } from './audio.js'
+import { fetchHnDiscussions } from './hnrss.js'
 import fs from 'fs'
 import path from 'path'
 import { CloudflareEmailService } from './fetchKvEmail.js'
@@ -321,6 +322,22 @@ async function run() {
   console.log(`✅ AI 全局分析完成，共收纳 ${articles.length} 条多维结构化情报`)
 
   const today = getBeijingDate();
+
+  // ==================== 3.6 抓取 HN 热门讨论 ====================
+  console.log('🚀 3.6 抓取 HN 热门讨论（人们正在讨论）...')
+  let hnDiscussions: any[] = []
+  try {
+    hnDiscussions = await fetchHnDiscussions(AI_API_KEY, 10)
+    // 存到 R2 供前端读取
+    await saveDataToR2(`hn_discussions/${today}.json`, {
+      date: today,
+      discussions: hnDiscussions,
+      fetchedAt: new Date().toISOString(),
+    })
+    console.log(`   ✅ HN 讨论已保存 (${hnDiscussions.length} 条)`)
+  } catch (e: any) {
+    console.warn(`   ⚠️ HN 讨论抓取失败: ${e.message}`)
+  }
 
   // ==================== 4. 生成简报、播客脚本、TTS ====================
   // 在生成简报前，先等一下重试队列（如果它还在等 5 分钟的话）

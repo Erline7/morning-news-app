@@ -9,7 +9,7 @@ const AI_BASE_URL = process.env.AI_BASE_URL || "https://api.deepseek.com/v1";
 const AI_MODEL = process.env.AI_MODEL || "deepseek-v4-flash";
 
 const _clients = new Map<string, { client: OpenAI; model: string }>();
-function getClient(apiKey: string): { client: OpenAI; model: string } {
+export function getClient(apiKey: string): { client: OpenAI; model: string } {
   if (!_clients.has(apiKey)) {
     _clients.set(apiKey, {
       client: new OpenAI({
