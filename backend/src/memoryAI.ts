@@ -13,17 +13,23 @@ import {
 import { parseAiJson, withTimeout } from './utils.js';
 
 // ====================== AI 客户端 ======================
+// 通过环境变量切换模型，与 ai.ts 保持一致
+const AI_BASE_URL = process.env.AI_BASE_URL || "https://api.deepseek.com/v1";
+const AI_MODEL = process.env.AI_MODEL || "deepseek-v4-flash";
+const AI_API_KEY = process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.DASHSCOPE_API_KEY;
 
 let _client: OpenAI | null = null;
-function getClient(): OpenAI {
+let _model: string = AI_MODEL;
+function getClient(): { client: OpenAI; model: string } {
   if (!_client) {
     _client = new OpenAI({
-      apiKey: process.env.DASHSCOPE_API_KEY,
-      baseURL: "https://api.longcat.chat/openai/v1",
+      apiKey: AI_API_KEY,
+      baseURL: AI_BASE_URL,
       maxRetries: 0,
     });
+    _model = AI_MODEL;
   }
-  return _client;
+  return { client: _client, model: _model };
 }
 
 // ====================== AI 每日时间线分析 ======================
@@ -43,7 +49,7 @@ export async function analyzeDailyTimeline(
     };
   }
 
-  const client = getClient();
+  const { client, model } = getClient();
 
   const eventsSummary = events.map(e => {
     const time = new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -69,7 +75,7 @@ ${eventsSummary}
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'LongCat-2.0',
+        model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 1000,
       }),
@@ -109,7 +115,7 @@ export async function updateThreadSummary(
 ): Promise<string> {
   if (events.length < 2) return '';
 
-  const client = getClient();
+  const { client, model } = getClient();
 
   const eventsSummary = events.map(e => {
     const date = e.timestamp.slice(0, 10);
@@ -128,7 +134,7 @@ ${eventsSummary}
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'LongCat-2.0',
+        model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 200,
       }),
@@ -152,7 +158,7 @@ export async function generateThreadSuggestion(
 ): Promise<string> {
   if (events.length < 3) return '';
 
-  const client = getClient();
+  const { client, model } = getClient();
 
   const recentEvents = events.slice(-5).map(e => e.title).join(', ');
 
@@ -168,7 +174,7 @@ export async function generateThreadSuggestion(
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'LongCat-2.0',
+        model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 200,
       }),
@@ -193,7 +199,7 @@ export async function detectNewThreads(
   const orphanEvents = recentEvents.filter(e => !e.refs.threads || e.refs.threads.length === 0);
   if (orphanEvents.length < 3) return [];
 
-  const client = getClient();
+  const { client, model } = getClient();
 
   const eventsSummary = orphanEvents.map(e => {
     const date = e.timestamp.slice(0, 10);
@@ -221,7 +227,7 @@ ${eventsSummary}
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'LongCat-2.0',
+        model,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 500,
       }),

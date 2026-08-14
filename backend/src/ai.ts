@@ -3,17 +3,22 @@ import { ArticleContent, ArticleIntelligence, RawHeadline } from './types.js';
 import { cleanArticle } from './textCleaner.js';
 import { parseAiJson, withTimeout } from './utils.js';
 
-/**
- * 创建 OpenAI 兼容客户端（按 apiKey 缓存）
- */
-const _clients = new Map<string, OpenAI>();
-function getClient(apiKey: string): OpenAI {
+// ====================== AI 客户端配置 ======================
+// 通过环境变量切换模型，默认 DeepSeek
+const AI_BASE_URL = process.env.AI_BASE_URL || "https://api.deepseek.com/v1";
+const AI_MODEL = process.env.AI_MODEL || "deepseek-v4-flash";
+
+const _clients = new Map<string, { client: OpenAI; model: string }>();
+function getClient(apiKey: string): { client: OpenAI; model: string } {
   if (!_clients.has(apiKey)) {
-    _clients.set(apiKey, new OpenAI({
-      apiKey,
-      baseURL: "https://api.longcat.chat/openai/v1",
-      maxRetries: 0,
-    }));
+    _clients.set(apiKey, {
+      client: new OpenAI({
+        apiKey,
+        baseURL: AI_BASE_URL,
+        maxRetries: 0,
+      }),
+      model: AI_MODEL,
+    });
   }
   return _clients.get(apiKey)!;
 }
@@ -43,12 +48,12 @@ export async function analyzeArticle(
   apiKey: string,
   ctx?: AnalysisContext
 ): Promise<ArticleIntelligence | ArticleIntelligence[]> {
-  const client = getClient(apiKey);
+  const { client, model } = getClient(apiKey);
 
   const safeContent = cleanArticle(content.content);
-  console.log(`[AI] 正在分析: ${content.title?.slice(0, 30)}... | 清洗后 ${safeContent.length} 字`);
+  console.log(`[AI] 正在分析: ${content.title?.slice(0, 30)}... | 清洗后 ${safeContent.length} 字 | 模型: ${model}`);
 
-  // 太长文章截断（LongCat 有输入限制）
+  // 太长文章截断（模型有输入限制）
   const MAX_CONTENT_LENGTH = 8000;
   const truncatedContent = safeContent.length > MAX_CONTENT_LENGTH
     ? safeContent.slice(0, MAX_CONTENT_LENGTH) + '\n\n（以下内容已截断）'
@@ -99,7 +104,7 @@ ${isAivalleyNewsletter ? '输出 JSON 数组' : '严格输出以下 JSON 格式'
   try {
     const response = await withTimeout(
       client.chat.completions.create({
-        model: 'LongCat-2.0',
+        model,
         messages: [{ role: 'user', content: finalPrompt }],
         max_tokens: isAivalleyNewsletter ? 8000 : 5000, // Newsletter 需要更多 token
       }),
@@ -170,7 +175,7 @@ export async function generateDailyBriefing(
   articles: ArticleIntelligence[],
   apiKey: string
 ): Promise<string> {
-  const client = getClient(apiKey);
+  const { client, model } = getClient(apiKey);
 
   // 按重要性评分排序，取前 10 篇
   const topArticles = [...articles]
@@ -205,7 +210,7 @@ ${topArticles.map(a => `- 标题：${a.title} [分类：${a.category}]
   console.log(`[AI] 正在撰写市场日刊简报（${topArticles.length} 篇，按重要性排序）...`);
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'LongCat-2.0',
+      model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 6000,
     }),
@@ -221,7 +226,7 @@ export async function generatePodcastScript(
   briefing: string,
   apiKey: string
 ): Promise<string> {
-  const client = getClient(apiKey);
+  const { client, model } = getClient(apiKey);
 
   const prompt = `你是一个专业的中文个人电台主播。请将以下日刊简报，改写成一份适合语音朗读的播客文稿。
 
@@ -244,7 +249,7 @@ export async function generatePodcastScript(
   console.log('[AI] 正在将简报改写为播客文案...');
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'LongCat-2.0',
+      model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 8000,
     }),
@@ -262,7 +267,7 @@ export async function generateDailyReportAi(
   date: string,
   apiKey: string
 ): Promise<any> {
-  const client = getClient(apiKey);
+  const { client, model } = getClient(apiKey);
 
   const prompt = `你是一个专业的个人成长教练。请根据以下用户今日与 AI 的提问记录和笔记，生成一份简洁的每日复盘报告。只输出 JSON，不要包含任何其他文字。
 
@@ -289,7 +294,7 @@ ${notes.length > 0 ? notes.map((n, i) => `${i + 1}. 标题：${n.title || '无�
   console.log('[AI] 正在生成每日复盘报告...');
   const response = await withTimeout(
     client.chat.completions.create({
-      model: 'LongCat-2.0',
+      model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 1000,
     }),

@@ -46,14 +46,11 @@ const PIPELINE_MODE = process.env.PIPELINE_MODE || 'morning'
 const REVIEW_DATE = process.env.REVIEW_DATE || null
 
 // ====================== 环境变量校验 ======================
-const REQUIRED_ENV = ['DASHSCOPE_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_KV_NAMESPACE_ID', 'CLOUDFLARE_API_TOKEN'] as const
-for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) {
-    console.error(`❌ 缺少必需的环境变量: ${key}`)
-    process.exit(1)
-  }
+const AI_API_KEY: string = process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.DASHSCOPE_API_KEY || ''
+if (!AI_API_KEY) {
+  console.error('❌ 缺少 AI API Key：请设置 AI_API_KEY 或 DEEPSEEK_API_KEY')
+  process.exit(1)
 }
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY!
 
 // ====================== 失败占位工厂 ======================
 function createFallbackIntelligence(headline: any, errorMessage: string): ArticleIntelligence {
@@ -87,28 +84,33 @@ function createFallbackIntelligence(headline: any, errorMessage: string): Articl
 }
 
 // ====================== 单篇文章处理函数 ======================
+// 返回值增加一个标记，区分真正分析成功 vs fallback 占位
+type ProcessResult = { data: any | any[]; failedHeadline?: any };
+
 async function processArticle(
   headline: any,
   apiKey: string,
   ctx?: AnalysisContext
-): Promise<any | any[]> {
+): Promise<ProcessResult> {
   try {
     const contentData = await fetchArticleContent(headline)
     const result = await analyzeArticle(contentData, apiKey, ctx)
     // Newsletter 可能返回数组（多篇文章）
     if (Array.isArray(result)) {
-      return result.map((item: any) => {
+      const data = result.map((item: any) => {
         if (headline.isUserAdded) item.isUserAdded = true;
         return item;
       });
+      return { data }
     }
     if (headline.isUserAdded) result.isUserAdded = true
-    return result
+    return { data: result }
   } catch (error: any) {
     console.warn(`⚠️ [失败占位] ${headline.title?.slice(0, 30)}... | ${error.message}`)
-    return createFallbackIntelligence(headline, error.message)
+    return { data: createFallbackIntelligence(headline, error.message), failedHeadline: headline }
   }
 }
+
 
 // ====================== 主流程 ======================
 async function run() {
@@ -125,7 +127,7 @@ async function run() {
 
     try {
       console.log('🚀 生成每日复盘报告...')
-      await generateDailyReport(reviewDate, DASHSCOPE_API_KEY)
+      await generateDailyReport(reviewDate, AI_API_KEY)
       console.log('   ✅ 每日复盘报告已生成')
     } catch (e: any) {
       console.error(`   ⚠️ 报告生成失败: ${e.message}`)
@@ -133,7 +135,7 @@ async function run() {
 
     try {
       console.log('🚀 记忆系统处理...')
-      await runMemoryPipeline(reviewDate, DASHSCOPE_API_KEY)
+      await runMemoryPipeline(reviewDate, AI_API_KEY)
       console.log('   ✅ 记忆系统处理完毕')
     } catch (e: any) {
       console.error(`   ⚠️ 记忆系统处理失败: ${e.message}`)
@@ -239,36 +241,80 @@ async function run() {
 
   const limit = pLimit(CONFIG.aiConcurrency)
   const processTasks = allHeadlines.map(headline =>
-    limit(() => processArticle(headline, DASHSCOPE_API_KEY, analysisCtx))
+    limit(() => processArticle(headline, AI_API_KEY, analysisCtx))
   )
-  const results = await Promise.all(processTasks)
+  const firstRoundResults = await Promise.all(processTasks)
 
-  // 展开数组（Aivalley Newsletter 会返回多篇文章）
-  const articles = results.flat()
+  // 区分成功 vs 失败，收集失败 headline 用于重试
+  const failedHeadlines: any[] = []
+  const articles: any[] = []
+  firstRoundResults.forEach(r => {
+    if (r.failedHeadline) failedHeadlines.push(r.failedHeadline)
+    articles.push(...(Array.isArray(r.data) ? r.data : [r.data]))
+  })
 
-  console.log(`✅ AI 全局分析完成，共收纳 ${articles.length} 条多维结构化情报`)
+  console.log(`✅ AI 首轮分析完成: ${articles.length - failedHeadlines.length} 篇成功, ${failedHeadlines.length} 篇失败（将进入重试队列）`)
+
+  // 启动失败重试队列（不阻塞主流程，在后台等 5 分钟后重试）
+  // 重试成功后把 fallback 替换为真实分析结果
+  const retryPromise = (async () => {
+    if (failedHeadlines.length === 0) return
+    console.log(`⏳ [重试队列] ${failedHeadlines.length} 篇文章将在 5 分钟后重试...`)
+    await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000))
+
+    console.log(`🔁 [重试队列] 开始重试 ${failedHeadlines.length} 篇失败文章...`)
+    const retryLimit = pLimit(CONFIG.aiConcurrency)
+    const retryResults = await Promise.all(
+      failedHeadlines.map(h => retryLimit(() => processArticle(h, AI_API_KEY, analysisCtx)))
+    )
+
+    let replaced = 0
+    retryResults.forEach((r, idx) => {
+      if (!r.failedHeadline) {
+        replaced++
+        const fresh = Array.isArray(r.data) ? r.data : [r.data]
+        // 用标题+来源定位并替换 fallback
+        fresh.forEach((item: any) => {
+          const fallbackIdx = articles.findIndex(a =>
+            a.title === failedHeadlines[idx].title &&
+            a.source === (failedHeadlines[idx].source || (Array.isArray(r.data) ? r.data[0]?.source : r.data?.source)) &&
+            a.summary?.startsWith(failedHeadlines[idx].title || '')
+          )
+          if (fallbackIdx >= 0) {
+            articles.splice(fallbackIdx, 1, ...fresh)
+          } else {
+            articles.push(...fresh)
+          }
+        })
+        console.log(`   ✅ 重试成功: ${failedHeadlines[idx].title?.slice(0, 40)}`)
+      } else {
+        console.log(`   ❌ 仍然失败: ${failedHeadlines[idx].title?.slice(0, 40)}`)
+      }
+    })
+
+    console.log(`🔁 [重试队列] 完成: ${replaced}/${failedHeadlines.length} 篇重试成功，当前共 ${articles.length} 篇`)
+  })().catch(e => console.warn(`⚠️ [重试队列] 执行异常: ${e.message}`))
+
+  console.log(`✅ AI 全局分析完成，共收纳 ${articles.length} 条多维结构化情报（含 ${failedHeadlines.length} 个待重试占位）`)
+
   if (githubTrendingData.length > 0) {
     console.log(`🚀 3.5 处理 ${githubTrendingData.length} 个 GitHub Trending 项目...`)
     const githubLimit = pLimit(Math.min(CONFIG.aiConcurrency, 2))
 
     const githubTasks = githubTrendingData.map(item =>
       githubLimit(async () => {
-        try {
-          const result = await processArticle(item, DASHSCOPE_API_KEY, analysisCtx)
-          result.isGithubTrending = true
-          return result
-        } catch (e: any) {
-          return {
-            ...createFallbackIntelligence(item, e.message),
-            category: '开源项目',
-            importance: 5,
-            keywords: ['github', 'trending'],
-            isGithubTrending: true
-          }
-        }
+        const { data } = await processArticle(item, AI_API_KEY, analysisCtx)
+        const arr = Array.isArray(data) ? data : [data]
+        arr.forEach((a: any) => {
+          a.isGithubTrending = true
+          a.category = a.category || '开源项目'
+          a.importance = a.importance || 5
+          a.keywords = Array.isArray(a.keywords) ? [...new Set([...a.keywords, 'github', 'trending'])] : ['github', 'trending']
+        })
+        return arr
       })
     )
-    const githubArticles = await Promise.all(githubTasks)
+    const githubArticles = (await Promise.all(githubTasks)).flat()
     articles.push(...githubArticles)
   }
 
@@ -276,12 +322,24 @@ async function run() {
 
   const today = getBeijingDate();
 
+  // ==================== 4. 生成简报、播客脚本、TTS ====================
+  // 在生成简报前，先等一下重试队列（如果它还在等 5 分钟的话）
+  // 注意：如果 failedHeadlines 为空，retryPromise 会立即 resolve，不影响性能
+  console.log('🚀 4. 生成简报、播客脚本、TTS...')
+  try {
+    console.log('   ⏳ 等待重试队列完成（最多等 5 分钟）...')
+    await retryPromise
+    console.log(`   ✅ 重试队列已结束，当前共 ${articles.length} 篇`)
+  } catch (e: any) {
+    console.warn(`   ⚠️ 重试队列异常: ${e.message}`)
+  }
+
   let briefing = ''
   let script = ''
   let audioUrl = ''
   try {
-    briefing = await generateDailyBriefing(articles, DASHSCOPE_API_KEY)
-    script = await generatePodcastScript(briefing, DASHSCOPE_API_KEY)
+    briefing = await generateDailyBriefing(articles, AI_API_KEY)
+    script = await generatePodcastScript(briefing, AI_API_KEY)
 
     const cacheDir = path.resolve(process.cwd(), '.cache')
     fs.mkdirSync(cacheDir, { recursive: true })

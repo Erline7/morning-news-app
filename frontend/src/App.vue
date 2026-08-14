@@ -636,7 +636,7 @@ const addToLibrary = async (sub) => {
 
 // Daily Report
 const loadReport = async () => {
-  const dateKey = new Date().toISOString().split('T')[0];
+  const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   isGeneratingReport.value = true;
   try {
     const res = await fetch(`${API_BASE}/api/report?date=${dateKey}&t=${Date.now()}`);
@@ -661,7 +661,8 @@ const loadReport = async () => {
 };
 
 const loadBriefing = async () => {
-  const dateKey = new Date().toISOString().split('T')[0];
+  // 用北京时间（UTC+8），和后端 runner.ts 的 getBeijingDate() 保持一致
+  const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   try {
     const res = await fetch(`${API_BASE}/api/brief?date=${dateKey}&t=${Date.now()}`);
     if (res.ok) {
@@ -678,7 +679,7 @@ const loadBriefing = async () => {
 
 // Timeline
 const loadTimeline = async () => {
-  const dateKey = new Date().toISOString().split('T')[0];
+  const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   try {
     const timelineRes = await fetch(`${R2_BASE_URL}/memory/timeline/${dateKey}.json?t=${Date.now()}`);
     if (timelineRes.ok) {
@@ -708,7 +709,7 @@ const loadTimeline = async () => {
 
 // Event recording
 const recordEvent = async (type, title, options = {}) => {
-  const dateKey = new Date().toISOString().split('T')[0];
+  const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   const event = {
     id: `evt_${dateKey.replace(/-/g, '')}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
@@ -744,7 +745,7 @@ const sendMessage = async () => {
   isChatLoading.value = true;
   scrollToBottom();
 
-  const dateKey = new Date().toISOString().split('T')[0];
+  const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   await fetch(`${API_BASE}/api/chat-history`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -840,7 +841,7 @@ onMounted(async () => {
     document.documentElement.classList.add('dark');
   }
 
-  const today = new Date();
+  const today = new Date(Date.now() + 8 * 60 * 60 * 1000);
   const dateKey = today.toISOString().split('T')[0];
   displayDateStr.value = formatDate(today);
 
