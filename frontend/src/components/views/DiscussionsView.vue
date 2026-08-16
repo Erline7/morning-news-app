@@ -95,7 +95,7 @@ onMounted(async () => {
   isLoading.value = true;
   try {
     const dateKey = getBeijingDateStr();
-    const url = `${R2_BASE_URL}/hn_discussions/${dateKey}.json?t=${Date.now()}`;
+    const url = `${R2_BASE_URL}/data/hn_discussions/${dateKey}.json?t=${Date.now()}`;
     const res = await fetch(url);
 
     if (res.ok) {

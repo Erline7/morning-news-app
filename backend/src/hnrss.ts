@@ -34,12 +34,12 @@ async function fetchHnRss(count: number = 10): Promise<HnDiscussion[]> {
 
 /**
  * 解析 HN RSS XML
- * hnrss.org 的格式：
+ * hnrss.org 实际格式：
  * <item>
- *   <title>Title</title>
+ *   <title><![CDATA[...]]></title>
  *   <link>https://example.com/article</link>
  *   <comments>https://news.ycombinator.com/item?id=xxx</comments>
- *   <description>XX points | XX comments | by author</description>
+ *   <description><![CDATA[<p>Article URL: <a href="...">...</a></p><p>Comments URL: ...</p><p>Points: 31</p><p># Comments: 7</p>]]></description>
  * </item>
  */
 function parseHnXml(xml: string): HnDiscussion[] {
@@ -51,22 +51,22 @@ function parseHnXml(xml: string): HnDiscussion[] {
     const itemXml = match[1];
 
     const title = extractTag(itemXml, 'title');
-    const url = extractTag(itemXml, 'link');
-    const hnUrl = extractTag(itemXml, 'comments');
+    const link = extractTag(itemXml, 'link');
+    const commentsUrl = extractTag(itemXml, 'comments');
     const description = extractTag(itemXml, 'description');
 
-    // 从 description 里提取 "XX points | XX comments"
-    const pointsMatch = description.match(/(\d+)\s*point/i);
-    const commentsMatch = description.match(/(\d+)\s*comment/i);
+    // 从 description HTML 里提取 Points 和 Comments
+    const pointsMatch = description.match(/Points:\s*(\d+)/i);
+    const commentsMatch = description.match(/#\s*Comments:\s*(\d+)/i);
 
     // 提取来源域名
-    const sourceMatch = url.match(/https?:\/\/([^\/]+)/);
+    const sourceMatch = link.match(/https?:\/\/([^\/]+)/);
 
     items.push({
       title: title || '',
       titleZh: '',  // 稍后 AI 翻译填充
-      url: url || '',
-      hnUrl: hnUrl || '',
+      url: link || '',
+      hnUrl: commentsUrl || '',
       points: pointsMatch ? parseInt(pointsMatch[1], 10) : 0,
       comments: commentsMatch ? parseInt(commentsMatch[1], 10) : 0,
       source: sourceMatch ? sourceMatch[1] : '',
