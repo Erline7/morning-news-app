@@ -182,15 +182,15 @@ async function run() {
     }
   })()
 
-  // 并发抓取：邮件 + CLS + 华尔街见闻 + 财新 + Yahoo + GitHub + HackerNews + Aivalley
-  const [emailHeadlines, cls, ws, cx, yahoo, github, hackernews, aivalley] = await Promise.allSettled([
+  // 并发抓取：邮件 + CLS + 华尔街见闻 + 财新 + Yahoo + GitHub + Aivalley
+  // 注意：Hacker News 已移到独立的「人们正在讨论」页面，不再进入内容库
+  const [emailHeadlines, cls, ws, cx, yahoo, github, aivalley] = await Promise.allSettled([
     emailTask,
     fetchCLSHeadlines(),
     fetchWallstreetHeadlines(),
     fetchCaixinGlobalHeadlines(),
     fetchYahooFinanceDetailed(),
     fetchGithubTrendingHeadlines(),
-    fetchHackerNewsHeadlines(),
     fetchAivalleyHeadlines()
   ])
 
@@ -200,7 +200,6 @@ async function run() {
     ...(ws.status === 'fulfilled' ? ws.value : []),
     ...(cx.status === 'fulfilled' ? cx.value : []),
     ...(yahoo.status === 'fulfilled' ? yahoo.value : []),
-    ...(hackernews.status === 'fulfilled' ? hackernews.value : []),
     ...(aivalley.status === 'fulfilled' ? aivalley.value : []),
   ]
 
@@ -208,7 +207,7 @@ async function run() {
     githubTrendingData = github.value
   }
 
-  console.log(`✅ 抓取完成 | 邮件: ${emailHeadlines.status === 'fulfilled' ? emailHeadlines.value.length : 0} | CLS: ${cls.status === 'fulfilled' ? cls.value.length : 0} | 华尔街见闻: ${ws.status === 'fulfilled' ? ws.value.length : 0} | 财新: ${cx.status === 'fulfilled' ? cx.value.length : 0} | Yahoo: ${yahoo.status === 'fulfilled' ? yahoo.value.length : 0} | HackerNews: ${hackernews.status === 'fulfilled' ? hackernews.value.length : 0} | GitHub: ${githubTrendingData.length} | Aivalley: ${aivalley.status === 'fulfilled' ? aivalley.value.length : 0} 条`)
+  console.log(`✅ 抓取完成 | 邮件: ${emailHeadlines.status === 'fulfilled' ? emailHeadlines.value.length : 0} | CLS: ${cls.status === 'fulfilled' ? cls.value.length : 0} | 华尔街见闻: ${ws.status === 'fulfilled' ? ws.value.length : 0} | 财新: ${cx.status === 'fulfilled' ? cx.value.length : 0} | Yahoo: ${yahoo.status === 'fulfilled' ? yahoo.value.length : 0} | GitHub: ${githubTrendingData.length} | Aivalley: ${aivalley.status === 'fulfilled' ? aivalley.value.length : 0} 条`)
 
   // 上传 GitHub 原始趋势快照
   if (githubTrendingData.length > 0) {
