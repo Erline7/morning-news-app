@@ -1,6 +1,7 @@
 /**
- * HN热门讨论 - 抓取 hnrss.org + AI 翻译标题
- * 数据来源：https://hnrss.org/frontpage?count=10
+ * HN热门讨论 - 抓取 Hacker News 官方 API + AI 翻译标题
+ * 使用官方 API（firebaseio.com），比 hnrss.org 更可靠
+ * 文档：https://github.com/HackerNews/API
  */
 
 import { getClient } from './ai.js';
@@ -15,71 +16,59 @@ export interface HnDiscussion {
   source: string;         // 来源域名
 }
 
-/**
- * 抓取 HN RSS feed（Top 10）
- */
-async function fetchHnRss(count: number = 10): Promise<HnDiscussion[]> {
-  const rssUrl = `https://hnrss.org/frontpage?count=${count}`;
-  const res = await fetch(rssUrl, {
-    headers: { 'User-Agent': 'DailyBrief/1.0' },
-  });
-
-  if (!res.ok) {
-    throw new Error(`HN RSS 返回 ${res.status}`);
-  }
-
-  const xml = await res.text();
-  return parseHnXml(xml);
+interface HnItem {
+  id: number;
+  title?: string;
+  url?: string;
+  score?: number;
+  descendants?: number;
+  by?: string;
+  type?: string;
 }
 
 /**
- * 解析 HN RSS XML
- * hnrss.org 实际格式：
- * <item>
- *   <title><![CDATA[...]]></title>
- *   <link>https://example.com/article</link>
- *   <comments>https://news.ycombinator.com/item?id=xxx</comments>
- *   <description><![CDATA[<p>Article URL: <a href="...">...</a></p><p>Comments URL: ...</p><p>Points: 31</p><p># Comments: 7</p>]]></description>
- * </item>
+ * 获取 HN Top N 讨论（使用官方 Firebase API）
  */
-function parseHnXml(xml: string): HnDiscussion[] {
-  const items: HnDiscussion[] = [];
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  let match;
+async function fetchHnTopStories(count: number = 10): Promise<HnDiscussion[]> {
+  // 1. 获取 Top Stories ID 列表
+  const topRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
+  if (!topRes.ok) throw new Error(`HN API topstories 返回 ${topRes.status}`);
+  const ids: number[] = await topRes.json();
 
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const itemXml = match[1];
+  // 2. 取前 N 个 ID
+  const topIds = ids.slice(0, count);
 
-    const title = extractTag(itemXml, 'title');
-    const link = extractTag(itemXml, 'link');
-    const commentsUrl = extractTag(itemXml, 'comments');
-    const description = extractTag(itemXml, 'description');
+  // 3. 并发获取每个故事的详情
+  const items = await Promise.all(
+    topIds.map(async (id) => {
+      try {
+        const res = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
+        if (!res.ok) return null;
+        return await res.json() as HnItem;
+      } catch {
+        return null;
+      }
+    })
+  );
 
-    // 从 description HTML 里提取 Points 和 Comments
-    const pointsMatch = description.match(/Points:\s*(\d+)/i);
-    const commentsMatch = description.match(/#\s*Comments:\s*(\d+)/i);
-
-    // 提取来源域名
-    const sourceMatch = link.match(/https?:\/\/([^\/]+)/);
-
-    items.push({
-      title: title || '',
-      titleZh: '',  // 稍后 AI 翻译填充
-      url: link || '',
-      hnUrl: commentsUrl || '',
-      points: pointsMatch ? parseInt(pointsMatch[1], 10) : 0,
-      comments: commentsMatch ? parseInt(commentsMatch[1], 10) : 0,
-      source: sourceMatch ? sourceMatch[1] : '',
+  // 4. 转换为 HnDiscussion 格式
+  const discussions: HnDiscussion[] = items
+    .filter((item): item is HnItem => item !== null && !!item.title)
+    .map((item) => {
+      const url = item.url || `https://news.ycombinator.com/item?id=${item.id}`;
+      const sourceMatch = url.match(/https?:\/\/([^\/]+)/);
+      return {
+        title: item.title || '',
+        titleZh: '',
+        url,
+        hnUrl: `https://news.ycombinator.com/item?id=${item.id}`,
+        points: item.score || 0,
+        comments: item.descendants || 0,
+        source: sourceMatch ? sourceMatch[1] : '',
+      };
     });
-  }
 
-  return items;
-}
-
-function extractTag(xml: string, tag: string): string {
-  const regex = new RegExp(`<${tag}>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\\/${tag}>`);
-  const match = xml.match(regex);
-  return match ? match[1].trim() : '';
+  return discussions;
 }
 
 /**
@@ -112,7 +101,7 @@ ${titlesText}`;
       model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 1000,
-      temperature: 0.3,  // 低温度保证翻译稳定性
+      temperature: 0.3,
     }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('翻译超时')), 60000)
@@ -145,9 +134,9 @@ ${titlesText}`;
  * 主函数：抓取 + 翻译
  */
 export async function fetchHnDiscussions(apiKey: string, count: number = 10): Promise<HnDiscussion[]> {
-  console.log(`🚀 [HN] 抓取 Top ${count} 热门讨论...`);
+  console.log(`🚀 [HN] 抓取 Top ${count} 热门讨论（官方 API）...`);
 
-  const items = await fetchHnRss(count);
+  const items = await fetchHnTopStories(count);
   console.log(`   ✅ 抓取到 ${items.length} 条`);
 
   try {
