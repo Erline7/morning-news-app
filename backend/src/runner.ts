@@ -373,6 +373,20 @@ async function run() {
     }))
     console.log(`   ✅ 简报已保存到 KV: brief:${today}`)
 
+    // 同时存到 R2（供前端直接读取，不依赖 Worker）
+    try {
+      await saveDataToR2(`brief/${today}.json`, {
+        date: today,
+        briefing,
+        script,
+        audioUrl: '',
+        generatedAt: new Date().toISOString(),
+      })
+      console.log(`   ✅ 简报已保存到 R2: brief/${today}.json`)
+    } catch (e: any) {
+      console.warn(`   ⚠️ 简报保存 R2 失败: ${e.message}`)
+    }
+
     // TTS 合成（MiniMax TTS，无需代理）
     try {
       audioUrl = await synthesizeAudio(script, today, { retainLocal: false })

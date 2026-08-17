@@ -643,13 +643,11 @@ const loadReport = async () => {
   const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   isGeneratingReport.value = true;
   try {
-    const res = await fetch(`${API_BASE}/api/report?date=${dateKey}&t=${Date.now()}`);
+    // 直接从 R2 读取
+    const res = await fetch(`${R2_BASE_URL}/data/reports/${dateKey}.json?t=${Date.now()}`);
     if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        dailyReport.value = data.report;
-        return;
-      }
+      dailyReport.value = await res.json();
+      return;
     }
     dailyReport.value = {
       date: dateKey,
@@ -668,13 +666,12 @@ const loadBriefing = async () => {
   // 用北京时间（UTC+8），和后端 runner.ts 的 getBeijingDate() 保持一致
   const dateKey = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
   try {
-    const res = await fetch(`${API_BASE}/api/brief?date=${dateKey}&t=${Date.now()}`);
+    // 直接从 R2 读取，不依赖 Worker API
+    const res = await fetch(`${R2_BASE_URL}/data/brief/${dateKey}.json?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.success && data.brief) {
-        dailyBriefing.value = data.brief.briefing || '';
-        dailyScript.value = data.brief.script || '';
-      }
+      dailyBriefing.value = data.briefing || '';
+      dailyScript.value = data.script || '';
     }
   } catch (e) {
     console.warn('加载简报失败:', e);

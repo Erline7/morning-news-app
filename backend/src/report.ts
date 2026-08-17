@@ -56,6 +56,15 @@ export async function generateDailyReport(date: string, apiKey: string): Promise
   await kvPut(`report:${date}`, JSON.stringify(fullReport));
   console.log(`[Report] ✅ 报告已保存到 report:${date}`);
 
+  // 同时存到 R2（供前端直接读取）
+  try {
+    const { saveDataToR2 } = await import('./storage.js');
+    await saveDataToR2(`reports/${date}.json`, fullReport);
+    console.log(`[Report] ✅ 报告已保存到 R2: reports/${date}.json`);
+  } catch (e: any) {
+    console.warn(`[Report] ⚠️ R2 保存失败: ${e.message}`);
+  }
+
   return fullReport;
 }
 
