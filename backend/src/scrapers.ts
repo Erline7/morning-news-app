@@ -55,8 +55,9 @@ async function requestWithRetry(url: string, config = {}, retries = 3, delay = 1
 // ==================== 头条抓取模块 ====================
 
 export async function fetchCLSHeadlines(): Promise<RawHeadline[]> {
+  // 方案 1：直接抓取官网（不稳定，因为 cls.cn 是中国网站，GitHub Actions 在海外）
   try {
-    const response = await requestWithRetry(CLS_BASE)
+    const response = await requestWithRetry(CLS_BASE, { timeout: 15000 }, 2, 1000)
     const $ = load(response.data)
     const headlines: RawHeadline[] = []
     const seenUrls = new Set<string>()
@@ -69,7 +70,7 @@ export async function fetchCLSHeadlines(): Promise<RawHeadline[]> {
       console.log('   [CLS] 🎯 正在提取位置: 主页 -> 热门文章排行榜');
       const listContainer = hotListTitle.next();
       listContainer.find('a').each((_: number, el: any) => {
-        if (headlines.length >= 5) return;  // 只取前 5 条
+        if (headlines.length >= 5) return;
         let title = $(el).text().trim()
         const href = $(el).attr('href')
 
@@ -85,14 +86,44 @@ export async function fetchCLSHeadlines(): Promise<RawHeadline[]> {
           }
         }
       })
-    } else {
-      console.log('   [CLS] ⚠️ 未找到"热门文章排行榜"区域，放弃抓取流以防混入杂讯');
+      if (headlines.length > 0) return headlines
     }
-    return headlines
+    console.log('   [CLS] ⚠️ 官网抓取失败或数据为空，降级到 RSS...');
   } catch (error: any) {
-    console.log(`   ❌ 财联社抓取失败: ${error.message}`)
-    return []
+    console.log(`   [CLS] 官网抓取失败 (${error.message})，降级到 RSS...`);
   }
+
+  // 方案 2：RSS 降级（通过 RSSHub，更稳定）
+  try {
+    const rssUrl = 'https://rsshub.app/cls/telegraph';
+    const response = await requestWithRetry(rssUrl, { timeout: 20000 }, 2, 2000);
+    const $ = load(response.data, { xmlMode: true });
+    const headlines: RawHeadline[] = [];
+
+    $('item').slice(0, 8).each((_, el) => {
+      if (headlines.length >= 5) return;
+      const title = $(el).find('title').text().trim();
+      const url = $(el).find('link').text().trim();
+      const description = $(el).find('description').text().trim();
+      if (title && url) {
+        headlines.push({
+          title, url,
+          source: 'CLS (RSS)',
+          collectedAt: new Date().toISOString(),
+          preFetchedContent: description || ''
+        });
+      }
+    });
+
+    if (headlines.length > 0) {
+      console.log(`   [CLS] ✅ RSS 降级成功，获取 ${headlines.length} 条`);
+      return headlines;
+    }
+  } catch (error: any) {
+    console.log(`   [CLS] ❌ RSS 降级也失败: ${error.message}`);
+  }
+
+  return [];
 }
 
 export async function fetchWallstreetHeadlines(): Promise<RawHeadline[]> {
