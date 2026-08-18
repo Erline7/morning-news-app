@@ -212,7 +212,7 @@ ${topArticles.map(a => `- 标题：${a.title} [分类：${a.category}]
     client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 6000,
+      max_tokens: 10000,
     }),
     180000
   );
