@@ -269,7 +269,13 @@ const todayStr = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split('
 const totalArticles = computed(() => rawArticles.value.filter(a => !a.isGithubTrending).length);
 
 const todayArticlesCount = computed(() =>
-  rawArticles.value.filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending).length
+  rawArticles.value.filter(a => {
+    if (!a.collectedAt || a.isGithubTrending) return false;
+    // collectedAt 是 UTC，转成北京时间日期再比较
+    const bjDate = new Date(a.collectedAt).getTime() + 8 * 60 * 60 * 1000;
+    const bjDateStr = new Date(bjDate).toISOString().split('T')[0];
+    return bjDateStr === todayStr;
+  }).length
 );
 
 const stats = computed(() => {
@@ -303,7 +309,12 @@ const filteredArticles = computed(() => {
 const briefingData = computed(() => {
   const grouped = {};
   const todayArticles = rawArticles.value
-    .filter(a => a.collectedAt?.startsWith(todayStr) && !a.isGithubTrending)
+    .filter(a => {
+      if (!a.collectedAt || a.isGithubTrending) return false;
+      const bjDate = new Date(a.collectedAt).getTime() + 8 * 60 * 60 * 1000;
+      const bjDateStr = new Date(bjDate).toISOString().split('T')[0];
+      return bjDateStr === todayStr;
+    })
     .sort((a, b) => (b.importance || 0) - (a.importance || 0))
     .slice(0, 10);
   todayArticles.forEach(article => {
@@ -320,9 +331,12 @@ const githubTrending = computed(() => githubTrendingData.value.slice(0, 10));
 
 // Aivalley 今日文章（用于首页 Aivalley Picks 区域）
 const aivalleyArticlesToday = computed(() =>
-  rawArticles.value.filter(a =>
-    a.source === 'Aivalley' && a.collectedAt?.startsWith(todayStr)
-  )
+  rawArticles.value.filter(a => {
+    if (a.source !== 'Aivalley' || !a.collectedAt) return false;
+    const bjDate = new Date(a.collectedAt).getTime() + 8 * 60 * 60 * 1000;
+    const bjDateStr = new Date(bjDate).toISOString().split('T')[0];
+    return bjDateStr === todayStr;
+  })
 );
 
 const sortedNotes = computed(() => {
