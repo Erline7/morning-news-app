@@ -355,7 +355,7 @@ async function run() {
   let audioUrl = ''
   try {
     briefing = await generateDailyBriefing(articles, AI_API_KEY)
-    script = await generatePodcastScript(briefing, AI_API_KEY)
+    script = await generatePodcastScript(briefing, AI_API_KEY, today)
 
     const cacheDir = path.resolve(process.cwd(), '.cache')
     fs.mkdirSync(cacheDir, { recursive: true })

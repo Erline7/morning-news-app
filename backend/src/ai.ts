@@ -224,12 +224,16 @@ ${topArticles.map(a => `- 标题：${a.title} [分类：${a.category}]
  */
 export async function generatePodcastScript(
   briefing: string,
-  apiKey: string
+  apiKey: string,
+  date?: string  // 可选：传入日期，避免 AI 幻觉
 ): Promise<string> {
   const { client, model } = getClient(apiKey);
 
+  const dateHint = date ? `今天的日期是 ${date}。` : '';
+
   const prompt = `你是一个专业的中文个人电台主播。请将以下日刊简报，改写成一份适合语音朗读的播客文稿。
 
+${dateHint}
 【字数要求】：全文约 1200-1500 字，约 5-7 分钟阅读时长。
 
 【核心要求】：
